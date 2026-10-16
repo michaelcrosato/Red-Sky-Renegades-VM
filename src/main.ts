@@ -7,6 +7,15 @@ import { emptyControls } from "./engine/types";
 import { Director } from "./game/director";
 import { FrontierRenderer } from "./render/renderer";
 import { UI, type UIAction, type Screen } from "./ui/ui";
+import {
+  isCampaignScreen,
+  craftActions,
+  type CampaignScreen,
+} from "./ui/campaign-ui";
+import { HUBS, RARITIES, GEAR_SLOTS } from "./game/campaign/catalog";
+import { TRAIL } from "./game/content";
+import { unlockedTier, derivedStats } from "./engine/campaign/progression";
+import type { RuneId } from "./engine/campaign/types";
 import identity from "./game/identity.json";
 import {
   MAP_AREA,
@@ -40,6 +49,129 @@ let previous = performance.now(),
 let demoRuns = 0,
   demoCompletions = 0,
   playedSeconds = 0;
+const campaignStack: Screen[] = [];
+function openCampaign(screen: CampaignScreen) {
+  const hub = HUBS.find(
+    (h) => Math.hypot(h.x - sim.state.player.x, h.z - sim.state.player.z) < 7,
+  );
+  if (hub) ui.campaign.hub = hub.id;
+  campaignStack.push(ui.screen);
+  ui.show(screen, sim.state);
+}
+function campaignAction(action: string) {
+  const c = ui.campaign;
+  if (isCampaignScreen(action)) {
+    if (action === "workshop" && ui.screen === "equipment")
+      c.workshopItem(c.selectedItem?.id);
+    openCampaign(action);
+    return;
+  }
+  const job = c.selectedContract,
+    item = c.selectedItem,
+    gear = sim.campaign.gear;
+  switch (action) {
+    case "prev":
+      c.cycle(-1);
+      break;
+    case "next":
+      c.cycle(1);
+      break;
+    case "page-prev":
+      c.page(-1);
+      break;
+    case "page-next":
+      c.page(1);
+      break;
+    case "back":
+      goBack();
+      return;
+    case "close":
+      campaignStack.length = 0;
+      ui.show("playing");
+      return;
+    case "accept":
+      if (job && sim.campaign.accept(c.hub, job.id)) {
+        campaignStack.length = 0;
+        ui.show("playing");
+        return;
+      }
+      break;
+    case "track":
+      if (job && sim.campaign.track(job.id)) {
+        campaignStack.length = 0;
+        ui.show("playing");
+        return;
+      }
+      break;
+    case "claim":
+      if (job) sim.campaign.claim(job.id);
+      break;
+    case "retry":
+      if (job && sim.campaign.retry(job.id)) {
+        campaignStack.length = 0;
+        ui.show("playing");
+        return;
+      }
+      break;
+    case "abandon":
+      if (job) sim.campaign.abandon(job.id);
+      break;
+    case "refresh":
+      sim.campaign.refresh(c.hub);
+      break;
+    case "difficulty":
+      sim.campaign.setDifficulty(
+        (sim.state.campaign.difficulty % unlockedTier(sim.state.campaign)) + 1,
+      );
+      break;
+    case "equip":
+      if (item) gear.equip(item.id);
+      break;
+    case "store":
+      if (item) gear.store(item.id);
+      break;
+    case "withdraw":
+      if (item) gear.withdraw(item.id);
+      break;
+    case "buy":
+      if (item) gear.buy(c.hub, item.id);
+      break;
+    case "learn":
+      gear.learn(c.selectedTalent.id);
+      break;
+    case "respec":
+      gear.respec();
+      break;
+    case "pay-bounty":
+      gear.payBounty();
+      break;
+    case "craft": {
+      const recipe = craftActions[c.recipe];
+      if (recipe === "brew") gear.brew();
+      else if (item) {
+        if (recipe === "upgrade") gear.upgrade(item.id);
+        else if (recipe === "reforge") gear.reforge(item.id);
+        else if (recipe === "salvage") gear.salvage(item.id);
+        else gear.socket(item.id, recipe as RuneId);
+      }
+      break;
+    }
+    case "choice-protect":
+    case "choice-profit":
+      if (
+        sim.campaign.choose(
+          c.pendingChoice,
+          action === "choice-protect" ? "protect" : "profit",
+        )
+      ) {
+        campaignStack.length = 0;
+        ui.show("playing");
+        return;
+      }
+      break;
+  }
+  if (isCampaignScreen(ui.screen)) ui.show(ui.screen, sim.state);
+}
 
 function save() {
   if (!demo && sim.state.mode === "story" && sim.state.player.health > 0) {
@@ -48,10 +180,13 @@ function save() {
   }
 }
 function start(mode: "story" | "range" = "story", continuing = false) {
+  campaignStack.length = 0;
   demo = false;
   ui.demo(false);
   sim = new Simulation(
-    continuing ? (storage.load() ?? newGame(mode)) : newGame(mode),
+    continuing
+      ? (storage.load() ?? newGame(mode))
+      : newGame(mode, crypto.getRandomValues(new Uint32Array(1))[0]),
   );
   renderer?.resetCamera();
   ui.show("playing");
@@ -61,8 +196,14 @@ function start(mode: "story" | "range" = "story", continuing = false) {
   lastSave = 0;
   if (mode === "story" && !continuing) save();
   ui.chapter(mode === "range" ? "THE PROVING GROUND" : "CINDER CREEK");
+  if (mode === "story" && !continuing)
+    ui.toast(
+      "Work waits at the dispatch board",
+      "The board beside Juniper offers contracts, gear and talents.",
+    );
 }
 function title(saveFirst = true) {
+  campaignStack.length = 0;
   if (saveFirst) save();
   demo = false;
   ui.demo(false);
@@ -85,6 +226,10 @@ function startDemo() {
   document.body.classList.remove("menu-open");
 }
 function goBack() {
+  if (isCampaignScreen(ui.screen)) {
+    ui.show(campaignStack.pop() ?? "playing", sim.state);
+    return;
+  }
   if (
     ui.screen === "paused" ||
     ui.screen === "journal" ||
@@ -119,17 +264,41 @@ function goBack() {
   }
 }
 function action(a: UIAction) {
+  // A menu click/confirm must never become a gunshot when play resumes.
+  input.clear();
   audio.unlock();
   audio.play("click");
   if (demo) {
     title(false);
     return;
   }
+  if (a.startsWith("campaign:")) {
+    campaignAction(a.slice(9));
+    return;
+  }
   switch (a) {
     case "start":
-    case "replay":
       if (ready) start();
       break;
+    case "replay": {
+      const previous = sim.state,
+        next = newGame("story");
+      next.campaign = structuredClone(previous.campaign);
+      next.campaign.tracked = null;
+      next.inventory = { ...previous.inventory, medicine: false };
+      next.discovered = [...previous.discovered];
+      next.honor = previous.honor;
+      next.player.health = derivedStats(
+        next.campaign,
+        next.player.weapon,
+      ).health;
+      sim = new Simulation(next);
+      campaignStack.length = 0;
+      renderer?.resetCamera();
+      ui.show("playing");
+      save();
+      break;
+    }
     case "continue":
       if (ready) start("story", true);
       break;
@@ -300,6 +469,27 @@ function events() {
           if (remarks[e.stage]) ui.toast("The rider", remarks[e.stage]);
         }
         break;
+      case "hub":
+        ui.campaign.hub = e.hub;
+        openCampaign("hub");
+        break;
+      case "campaign-choice":
+        ui.campaign.pendingChoice = e.contract;
+        openCampaign("campaign-choice");
+        break;
+      case "level-up":
+        ui.toast(
+          `Level ${e.level}`,
+          `${sim.state.campaign.progression.points} talent points available · Open Equipment & talents`,
+        );
+        audio.play("complete");
+        break;
+      case "loot":
+        ui.toast(
+          `${RARITIES[e.rarity as keyof typeof RARITIES].name} equipment`,
+          e.name,
+        );
+        break;
     }
   }
 }
@@ -335,6 +525,31 @@ function frame(now: number) {
   if (demo) {
     const d = director.update(dt, sim);
     driverYaw = d.yaw;
+    if (d.panel && ui.screen !== d.panel) {
+      ui.campaign.hub = "cinder";
+      if (d.panel === "board" && d.selection)
+        ui.campaign.cursors.board = Math.max(
+          0,
+          sim.state.campaign.boards.cinder.findIndex(
+            (c) => c.id === d.selection,
+          ),
+        );
+      if (d.panel === "contracts" && d.selection)
+        ui.campaign.cursors.contracts = Math.max(
+          0,
+          sim.state.campaign.active.findIndex((c) => c.id === d.selection),
+        );
+      if (d.panel === "equipment" && d.selection) {
+        const item = sim.state.campaign.items.find((i) => i.id === d.selection);
+        if (item) {
+          ui.campaign.slot = GEAR_SLOTS.indexOf(item.slot);
+          ui.campaign.cursors.equipment = sim.state.campaign.items
+            .filter((i) => i.slot === item.slot)
+            .findIndex((i) => i.id === item.id);
+        }
+      }
+      ui.show(d.panel, sim.state);
+    }
     if (d.restart) {
       startDemo();
     } else {
@@ -380,7 +595,7 @@ function frame(now: number) {
       sim.update(wheelOpen ? dt * 0.15 : dt, c, renderer!.yaw);
       if (
         lastSave > 30 &&
-        !sim.state.enemies.some((e) => e.health > 0 && e.awareness > 0.7)
+        !sim.allEnemies().some((e) => e.health > 0 && e.awareness > 0.7)
       ) {
         save();
         lastSave = 0;
@@ -398,7 +613,11 @@ function frame(now: number) {
     driverYaw,
   );
   renderer!.render();
-  audio.update(sim.state.stage === "fight", sim.state.weather === "rain");
+  audio.update(
+    sim.state.stage === "fight" ||
+      sim.state.campaign.enemies.some((e) => e.health > 0 && e.awareness > 0.7),
+    sim.state.weather === "rain",
+  );
   ui.tick(dt, sim, renderer, (now - input.lastActivity) / 1000);
 }
 
@@ -438,7 +657,10 @@ Object.defineProperty(window, "__frontier", {
           roads: FRONTIER_ROADS.map((road) =>
             road.map((point) => ({ ...point })),
           ),
+          storyRoad: TRAIL.map((point) => ({ ...point })),
         },
+        hubs: HUBS.map((h) => ({ ...h })),
+        character: derivedStats(sim.state.campaign, sim.state.player.weapon),
         ready,
         screen: ui.screen,
         demo,

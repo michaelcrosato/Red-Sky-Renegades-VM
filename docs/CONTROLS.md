@@ -39,3 +39,15 @@ There are no mobile movement pads or touch combat buttons. The small menu button
 Open the journal with Create/View or Tab. D-pad Left/Right or the arrow keys cycle the story objective and eight frontier destinations. Cross or Enter tracks the selected destination on the compass and minimap. Circle or Escape closes the atlas. Selecting the story objective returns navigation to the medicine mission.
 
 Landmarks are discovered on approach and recorded in your save. Triangle/E reads a trail marker; at Pinewatch Camp and Settlers’ Rest it also restores rider and horse cores.
+
+## Campaign, builds and loot
+
+- **Triangle / E:** open a dispatch board, interact with job objectives, capture a wounded leader or pick up nearby loot.
+- **Circle / V during play:** stamina-based evade; Circle remains Back in menus.
+- **D-pad:** spatial hub navigation; Up/Down selects actions on detail pages, Left/Right browses contracts or items.
+- **L1/R1 or [ / ] in campaign pages:** change equipment slot, talent path or workshop recipe.
+- **Pause → Contract journal:** track active work and optional field events. Return to the issuing hub for rewards.
+- **Pause → Equipment & talents:** compare/equip gear, spend talent points and inspect character stats. Workshop and stash transactions require a nearby hub.
+- **Atlas:** dispatch hubs are selectable after the eight landmark destinations.
+
+Talents and gear can improve the base 65-health tonic, Focus efficiency, reload speed, movement and riding. The character sheet shows the resulting values. Read the campaign guide for resource costs and regional consequences.

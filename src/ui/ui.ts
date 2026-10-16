@@ -22,7 +22,24 @@ import type { Controls, GameState } from "../engine/types";
 import type { Settings } from "../engine/save";
 import type { Simulation } from "../engine/simulation";
 import type { FrontierRenderer } from "../render/renderer";
+import {
+  CampaignUI,
+  isCampaignScreen,
+  type CampaignScreen,
+} from "./campaign-ui";
+import {
+  HUBS,
+  RARITIES,
+  CONTRACT_NAMES,
+  ENEMY_MODIFIERS,
+} from "../game/campaign/catalog";
+import { campaignNavigation } from "../engine/campaign/queries";
+import { derivedStats, xpToNext } from "../engine/campaign/progression";
+import { supplyPrice, nearbyHub } from "../engine/campaign/gear";
+import type { CampaignEnemy } from "../engine/campaign/types";
+import { DESTINATIONS, destinationById } from "../game/destinations";
 export type Screen =
+  | CampaignScreen
   | "title"
   | "playing"
   | "paused"
@@ -37,6 +54,7 @@ export type Screen =
   | "error"
   | "confirm-new";
 export type UIAction =
+  | `campaign:${string}`
   | "start"
   | "continue"
   | "resume"
@@ -68,6 +86,7 @@ const esc = (s: string) =>
       ]!,
   );
 export class UI {
+  readonly campaign = new CampaignUI();
   screen: Screen = "title";
   private selected = 0;
   private focusItems: HTMLElement[] = [];
@@ -81,8 +100,9 @@ export class UI {
   private lastRegion = "";
   private journalIndex = 0;
   private journalState?: GameState;
+  private campaignState?: GameState;
   get selectedWaypoint() {
-    return LANDMARKS[this.journalIndex - 1]?.id ?? null;
+    return DESTINATIONS[this.journalIndex - 1]?.id ?? null;
   }
   private map: CanvasRenderingContext2D;
   onAction: (action: UIAction) => void = () => {};
@@ -108,6 +128,18 @@ export class UI {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-action]");
       if (b) this.onAction(b.dataset.action as UIAction);
     });
+    this.root
+      .querySelector(".lower-left")!
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div id="rider-progress"><strong></strong><div><i></i></div><small></small></div>',
+      );
+    this.root
+      .querySelector("#hud")!
+      .insertAdjacentHTML(
+        "beforeend",
+        '<div id="target-info" class="hidden"><strong></strong><div><i></i></div><small></small></div><div id="evade-status"></div>',
+      );
     this.root
       .querySelector("#pause-button")!
       .addEventListener("click", () => this.onAction("resume"));
@@ -172,6 +204,7 @@ export class UI {
     s?: GameState,
     detail?: { speaker?: string; text?: string },
   ) {
+    if (s) this.campaignState = s;
     this.screen = screen;
     this.title.classList.toggle("hidden", screen !== "title");
     this.hud.classList.toggle(
@@ -192,117 +225,130 @@ export class UI {
       heading = "",
       body = "",
       buttons = "";
-    switch (screen) {
-      case "paused":
-        heading = "Take a breath.";
-        kicker = "THE FRONTIER CAN WAIT";
-        buttons =
-          this.button("Return to the trail", "resume") +
-          this.button("Journal & map", "journal") +
-          this.button("Field guide", "guide") +
-          this.button("Settings", "settings") +
-          this.button("Save & return to title", "title");
-        break;
-      case "confirm-new":
-        heading = "A new beginning?";
-        body =
-          "<p>Your current trail will be replaced when the new story begins.</p>";
-        buttons =
-          this.button("Begin a new story", "start") +
-          this.button("Keep my current trail", "cancel-new");
-        break;
-      case "settings":
-        heading = "Make yourself at home.";
-        kicker = "SETTINGS";
-        body = this.settingsBody();
-        buttons = this.button("Back to the trail", "back");
-        break;
-      case "guide":
-        heading = "The rider’s field guide";
-        kicker = `FIELD NOTES · ${this.guidePage + 1} / ${FIELD_GUIDE.length}`;
-        body = this.guideBody();
-        buttons =
-          this.button("Turn the page", "guide") + this.button("Back", "back");
-        break;
-      case "journal":
-        heading =
-          s?.mode === "range" ? "The proving ground" : "The last good deed";
-        kicker = "YOUR JOURNAL";
-        this.journalState = s!;
-        this.journalIndex = s!.explorationTarget
-          ? LANDMARKS.findIndex((l) => l.id === s!.explorationTarget) + 1
-          : 0;
-        body = this.journalBody(s!);
-        buttons =
-          this.button("Track this destination", "mark-location") +
-          this.button("Back to the trail", "back");
-        break;
-      case "dialogue":
-        heading = detail?.speaker ?? "";
-        kicker = "A MOMENT ON THE FRONTIER";
-        body = `<p class="dialogue-copy">${esc(detail?.text ?? "")}</p>`;
-        buttons = this.button("Continue", "dialogue");
-        break;
-      case "choice":
-        heading = "“I’ve got a family.”";
-        kicker = "THE WEIGHT OF MERCY";
-        body =
-          "<p>The leader lets his revolver fall. The medicine is yours. Only one decision remains.</p>";
-        buttons =
-          this.button(
-            "Let him walk",
-            "mercy",
-            "Mercy leaves a different kind of mark.",
-          ) +
-          this.button(
-            "Settle the debt",
-            "revenge",
-            "Some debts follow you home.",
-          );
-        break;
-      case "shop":
-        heading = "Elias’s provisions";
-        kicker = `CINDER CREEK · $${s!.inventory.dollars.toFixed(2)}`;
-        body =
-          "<p>“A full cylinder and a little medicine. That’s a fair start.”</p>";
-        buttons =
-          this.button(
-            "Prairie tonic · $8",
-            "buy-tonic",
-            "Restore 65 health and 25 focus",
-          ) +
-          this.button(
-            "Ammunition bundle · $6",
-            "buy-ammo",
-            "18 revolver rounds · 12 repeater rounds",
-          ) +
-          this.button("Leave the counter", "back");
-        break;
-      case "dead":
-        heading = "The dust settles.";
-        kicker = "YOUR STORY ISN’T OVER";
-        body = "<p>Return to your last camp or mission checkpoint.</p>";
-        buttons =
-          this.button("Try again", "retry") +
-          this.button("Return to title", "title");
-        break;
-      case "complete":
-        heading = "One good thing.";
-        kicker = "THE LAST GOOD DEED · COMPLETE";
-        body = `<p>${s!.choice === "mercy" ? "You spared a life and saved a camp. The West might remember." : "The medicine made it home. So did the weight of your decision."}</p><div class="results"><div><b>${Math.floor(s!.elapsed / 60)}:${String(Math.floor(s!.elapsed % 60)).padStart(2, "0")}</b><small>TIME ON THE TRAIL</small></div><div><b>${s!.shots ? Math.round((s!.hits / s!.shots) * 100) : 0}%</b><small>ACCURACY</small></div><div><b>${s!.honor >= 0 ? "+" : ""}${s!.honor}</b><small>HONOR</small></div></div><p class="reward">+$65 · Camp supplies restored</p>`;
-        buttons =
-          this.button("Stay a while", "resume") +
-          this.button("Ride it again", "replay") +
-          this.button("Return to title", "title");
-        break;
-      case "error":
-        heading = "The frontier needs WebGPU.";
-        kicker = "RENDERER UNAVAILABLE";
-        body = `<p>${esc(detail?.text ?? "A WebGPU-capable browser and GPU are required.")}</p><p class="muted">Enable hardware acceleration and open this page in a browser with WebGPU support. This edition renders exclusively with WebGPU.</p>`;
-        buttons =
-          '<button onclick="location.reload()"><span class="menu-arrow">›</span>Try again</button>';
-        break;
-    }
+    if (isCampaignScreen(screen)) {
+      const frame = this.campaign.render(screen, s!);
+      heading = frame.heading;
+      kicker = frame.kicker;
+      body = frame.body;
+      buttons = frame.buttons;
+    } else
+      switch (screen) {
+        case "paused":
+          heading = "Take a breath.";
+          kicker = "THE FRONTIER CAN WAIT";
+          buttons =
+            this.button("Return to the trail", "resume") +
+            (nearbyHub(s!)
+              ? this.button("Local dispatch hub", "campaign:hub")
+              : "") +
+            this.button("Journal & map", "journal") +
+            this.button("Contract journal", "campaign:contracts") +
+            this.button("Equipment & talents", "campaign:equipment") +
+            this.button("Field guide", "guide") +
+            this.button("Settings", "settings") +
+            this.button("Save & return to title", "title");
+          break;
+        case "confirm-new":
+          heading = "A new beginning?";
+          body =
+            "<p>Your current trail will be replaced when the new story begins.</p>";
+          buttons =
+            this.button("Begin a new story", "start") +
+            this.button("Keep my current trail", "cancel-new");
+          break;
+        case "settings":
+          heading = "Make yourself at home.";
+          kicker = "SETTINGS";
+          body = this.settingsBody();
+          buttons = this.button("Back to the trail", "back");
+          break;
+        case "guide":
+          heading = "The rider’s field guide";
+          kicker = `FIELD NOTES · ${this.guidePage + 1} / ${FIELD_GUIDE.length}`;
+          body = this.guideBody();
+          buttons =
+            this.button("Turn the page", "guide") + this.button("Back", "back");
+          break;
+        case "journal":
+          heading =
+            s?.mode === "range" ? "The proving ground" : "The last good deed";
+          kicker = "YOUR JOURNAL";
+          this.journalState = s!;
+          this.journalIndex = s!.explorationTarget
+            ? DESTINATIONS.findIndex((l) => l.id === s!.explorationTarget) + 1
+            : 0;
+          body = this.journalBody(s!);
+          buttons =
+            this.button("Track this destination", "mark-location") +
+            this.button("Contracts", "campaign:contracts") +
+            this.button("Back to the trail", "back");
+          break;
+        case "dialogue":
+          heading = detail?.speaker ?? "";
+          kicker = "A MOMENT ON THE FRONTIER";
+          body = `<p class="dialogue-copy">${esc(detail?.text ?? "")}</p>`;
+          buttons = this.button("Continue", "dialogue");
+          break;
+        case "choice":
+          heading = "“I’ve got a family.”";
+          kicker = "THE WEIGHT OF MERCY";
+          body =
+            "<p>The leader lets his revolver fall. The medicine is yours. Only one decision remains.</p>";
+          buttons =
+            this.button(
+              "Let him walk",
+              "mercy",
+              "Mercy leaves a different kind of mark.",
+            ) +
+            this.button(
+              "Settle the debt",
+              "revenge",
+              "Some debts follow you home.",
+            );
+          break;
+        case "shop":
+          heading = "Elias’s provisions";
+          kicker = `CINDER CREEK · $${s!.inventory.dollars.toFixed(2)}`;
+          body =
+            "<p>“A full cylinder and a little medicine. That’s a fair start.”</p>";
+          buttons =
+            this.button(
+              `Prairie tonic · $${supplyPrice(s!, "tonic")}`,
+              "buy-tonic",
+              "Restore 65 health and 25 focus",
+            ) +
+            this.button(
+              `Ammunition bundle · $${supplyPrice(s!, "ammo")}`,
+              "buy-ammo",
+              "18 revolver rounds · 12 repeater rounds",
+            ) +
+            this.button("Leave the counter", "back");
+          break;
+        case "dead":
+          heading = "The dust settles.";
+          kicker = "YOUR STORY ISN’T OVER";
+          body = "<p>Return to your last camp or mission checkpoint.</p>";
+          buttons =
+            this.button("Try again", "retry") +
+            this.button("Return to title", "title");
+          break;
+        case "complete":
+          heading = "One good thing.";
+          kicker = "THE LAST GOOD DEED · COMPLETE";
+          body = `<p>${s!.choice === "mercy" ? "You spared a life and saved a camp. The West might remember." : "The medicine made it home. So did the weight of your decision."}</p><div class="results"><div><b>${Math.floor(s!.elapsed / 60)}:${String(Math.floor(s!.elapsed % 60)).padStart(2, "0")}</b><small>TIME ON THE TRAIL</small></div><div><b>${s!.shots ? Math.round((s!.hits / s!.shots) * 100) : 0}%</b><small>ACCURACY</small></div><div><b>${s!.honor >= 0 ? "+" : ""}${s!.honor}</b><small>HONOR</small></div></div><p class="reward">+$65 · Camp supplies restored</p>`;
+          buttons =
+            this.button("Stay a while", "resume") +
+            this.button("Ride it again", "replay") +
+            this.button("Return to title", "title");
+          break;
+        case "error":
+          heading = "The frontier needs WebGPU.";
+          kicker = "RENDERER UNAVAILABLE";
+          body = `<p>${esc(detail?.text ?? "A WebGPU-capable browser and GPU are required.")}</p><p class="muted">Enable hardware acceleration and open this page in a browser with WebGPU support. This edition renders exclusively with WebGPU.</p>`;
+          buttons =
+            '<button onclick="location.reload()"><span class="menu-arrow">›</span>Try again</button>';
+          break;
+      }
     this.overlay.innerHTML = `<div class="modal-backdrop"></div><div class="panel ${screen}"><div class="eyebrow">${star} ${kicker}</div><h2>${heading}</h2>${body}<nav aria-label="${screen} menu">${buttons}</nav><div class="panel-footer"><span><kbd>×</kbd> SELECT</span><span><kbd>○</kbd> BACK</span><span class="footer-star">✦</span></div></div>`;
     this.collect(this.overlay);
     this.overlay.querySelectorAll<HTMLInputElement>("input").forEach((input) =>
@@ -336,15 +382,15 @@ export class UI {
   }
   private journalBody(s: GameState) {
     const stage = STAGES.find((t) => t.id === s.stage)!;
-    const place = LANDMARKS[this.journalIndex - 1],
+    const place = DESTINATIONS[this.journalIndex - 1],
       target = place ?? stage.target;
-    return `<div class="journal-layout"><div class="journal-map">${territoryMap(s, this.journalIndex)}</div><div class="destination"><div class="destination-cycle"><button data-map-cycle tabindex="-1" data-action="map-prev" aria-label="Previous destination">‹</button><span>${place ? `TRAIL MARKER ${this.journalIndex} / ${LANDMARKS.length}` : "STORY OBJECTIVE"}</span><button data-map-cycle tabindex="-1" data-action="map-next" aria-label="Next destination">›</button></div><h3>${place?.name ?? stage.title}</h3><p>${place?.description ?? stage.text}</p><p class="destination-distance">${Math.round(distance(s.player, target))} m away${place ? ` · ${s.discovered.includes(place.id) ? "Discovered" : "Unexplored"}` : ""}</p><p class="map-instructions">← → Choose a destination<br>× Track it on your compass</p><div class="journal-progress">${LANDMARKS.map((l) => `<i class="${s.discovered.includes(l.id) ? "done" : ""}"></i>`).join("")}</div><p class="discovery-count">${s.discovered.length} of ${LANDMARKS.length} frontier landmarks discovered</p><div class="inventory-line"><span>$${s.inventory.dollars.toFixed(2)}</span><span>${s.inventory.tonics} tonics</span><span>${s.inventory.herbs} sage</span></div></div></div>`;
+    return `<div class="journal-layout"><div class="journal-map">${territoryMap(s, this.journalIndex)}</div><div class="destination"><div class="destination-cycle"><button data-map-cycle tabindex="-1" data-action="map-prev" aria-label="Previous destination">‹</button><span>${place ? (place.isHub ? "DISPATCH HUB" : `TRAIL MARKER ${this.journalIndex} / ${LANDMARKS.length}`) : "STORY OBJECTIVE"}</span><button data-map-cycle tabindex="-1" data-action="map-next" aria-label="Next destination">›</button></div><h3>${place?.name ?? stage.title}</h3><p>${place?.description ?? stage.text}</p><p class="destination-distance">${Math.round(distance(s.player, target))} m away${place ? ` · ${place.isHub ? "Services available" : s.discovered.includes(place.id) ? "Discovered" : "Unexplored"}` : ""}</p><p class="map-instructions">← → Choose a destination<br>× Track it on your compass</p><div class="journal-progress">${LANDMARKS.map((l) => `<i class="${s.discovered.includes(l.id) ? "done" : ""}"></i>`).join("")}</div><p class="discovery-count">${s.discovered.length} of ${LANDMARKS.length} frontier landmarks discovered</p><div class="inventory-line"><span>$${s.inventory.dollars.toFixed(2)}</span><span>${s.inventory.tonics} tonics</span><span>${s.inventory.herbs} sage</span></div></div></div>`;
   }
   cycleDestination(direction: number) {
     if (!this.journalState) return;
     this.journalIndex =
-      (this.journalIndex + direction + LANDMARKS.length + 1) %
-      (LANDMARKS.length + 1);
+      (this.journalIndex + direction + DESTINATIONS.length + 1) %
+      (DESTINATIONS.length + 1);
     this.overlay.querySelector(".journal-layout")!.outerHTML = this.journalBody(
       this.journalState,
     );
@@ -352,6 +398,26 @@ export class UI {
   }
   navigate(c: Controls) {
     if (this.screen === "playing") return;
+    if (this.screen === "hub") {
+      const count = this.focusItems.length,
+        rows = Math.ceil(count / 2),
+        row = Math.floor(this.selected / 2),
+        column = this.selected % 2;
+      if (c.navY)
+        this.selected = Math.min(
+          count - 1,
+          ((row + c.navY + rows) % rows) * 2 + column,
+        );
+      else if (c.navX)
+        this.selected = Math.min(
+          count - 1,
+          row * 2 + ((column + c.navX + 2) % 2),
+        );
+      this.paintFocus();
+      if (c.confirm) this.focusItems[this.selected]?.click();
+      else if (c.back) this.onAction("campaign:back");
+      return;
+    }
     if (c.navY) {
       this.selected =
         (this.selected + c.navY + this.focusItems.length) %
@@ -376,6 +442,13 @@ export class UI {
       this.show("guide");
     }
     if (c.navX && this.screen === "journal") this.cycleDestination(c.navX);
+    if (isCampaignScreen(this.screen) && (c.navX || c.page)) {
+      const screen = this.screen;
+      if (c.page) this.campaign.page(c.page);
+      else this.campaign.cycle(c.navX);
+      this.show(screen, this.campaignState!);
+      return;
+    }
     if (c.confirm) focused?.click();
     else if (c.back && this.screen !== "title") this.onAction("back");
   }
@@ -432,8 +505,9 @@ export class UI {
     const s = sim.state,
       p = s.player,
       stage = STAGES.find((t) => t.id === s.stage)!,
-      exploration = landmarkById(s.explorationTarget),
-      way = exploration ?? stage.target,
+      contract = campaignNavigation(s),
+      exploration = destinationById(s.explorationTarget),
+      way = contract?.position ?? exploration ?? stage.target,
       region = regionAt(p.x, p.z);
     if (`${s.mode}:${s.stage}` !== this.lastStage) {
       this.lastStage = `${s.mode}:${s.stage}`;
@@ -448,24 +522,29 @@ export class UI {
     this.setText(".region-label", region);
     this.setText(
       "#mission-kicker",
-      exploration
-        ? "EXPLORING THE FRONTIER"
-        : s.mode === "range"
-          ? "THE PROVING GROUND"
-          : "THE LAST GOOD DEED",
+      contract
+        ? `${CONTRACT_NAMES[contract.contract.kind].toUpperCase()} · TIER ${contract.contract.tier}`
+        : exploration
+          ? "EXPLORING THE FRONTIER"
+          : s.mode === "range"
+            ? "THE PROVING GROUND"
+            : "THE LAST GOOD DEED",
     );
     this.setText(
       "#objective-title",
-      exploration?.name ??
+      contract?.title ??
+        exploration?.name ??
         (s.mode === "range" ? "Make every shot count" : stage.title),
     );
     this.setText(
       "#objective-text",
-      exploration
-        ? exploration.description
-        : s.mode === "range"
-          ? "Aim at five targets. Use the range sign to reset."
-          : stage.text,
+      contract
+        ? contract.text
+        : exploration
+          ? exploration.description
+          : s.mode === "range"
+            ? "Aim at five targets. Use the range sign to reset."
+            : stage.text,
     );
     const degrees =
       (((Math.PI - (view?.yaw ?? 0)) * 180) / Math.PI + 360) % 360;
@@ -478,10 +557,17 @@ export class UI {
     const wanted = this.root.querySelector("#wanted")!;
     wanted.classList.toggle("hidden", s.heat <= 0);
     wanted.textContent = `WANTED · $${s.bounty} · ${Math.ceil(s.heat)}s`;
-    this.core("health", p.health);
+    const stats = sim.campaign.stats;
+    this.core("health", (p.health / stats.health) * 100);
     this.core("stamina", p.mounted ? s.horse.stamina : p.stamina);
     this.core("focus", p.focus);
-    this.setText("#weapon-label", WEAPONS[p.weapon].name.toUpperCase());
+    this.setText(
+      "#weapon-label",
+      (
+        s.campaign.items.find((i) => i.id === s.campaign.equipped[p.weapon])
+          ?.name ?? WEAPONS[p.weapon].name
+      ).toUpperCase(),
+    );
     this.setText("#ammo-count", String(p.ammo[p.weapon]).padStart(2, "0"));
     this.setText("#ammo-reserve", String(p.reserve[p.weapon]));
     this.setText(
@@ -493,6 +579,43 @@ export class UI {
     ret.classList.toggle("aiming", p.aiming);
     ret.classList.toggle("hit", this.hitTime > 0);
     ret.classList.toggle("locked", !!view && !!sim.aimTarget(view.yaw));
+    const target = view && p.aiming ? sim.aimTarget(view.yaw) : undefined,
+      targetInfo = this.root.querySelector("#target-info")!;
+    targetInfo.classList.toggle("hidden", !target);
+    if (target) {
+      const enemy = "owner" in target ? (target as CampaignEnemy) : null;
+      targetInfo.querySelector("strong")!.textContent = enemy
+        ? `Lv ${enemy.level} · ${enemy.name}${enemy.boss ? " ★" : ""}`
+        : "Cinder outlaw";
+      (targetInfo.querySelector("i") as HTMLElement).style.width =
+        `${Math.max(0, (target.health / (enemy?.maxHealth ?? 100)) * 100)}%`;
+      targetInfo.querySelector("small")!.textContent =
+        enemy?.boss && enemy.health <= enemy.maxHealth * 0.3
+          ? "HOLD FIRE · APPROACH TO CAPTURE"
+          : (enemy?.modifiers
+              .map(
+                (m) => ENEMY_MODIFIERS[m as keyof typeof ENEMY_MODIFIERS].name,
+              )
+              .join(" · ") ?? "");
+    }
+    const progression = s.campaign.progression,
+      xp = progression.level === 30 ? progression.masteryXP : progression.xp,
+      next = progression.level === 30 ? 1500 : xpToNext(progression.level),
+      xpEl = this.root.querySelector("#rider-progress")!;
+    xpEl.querySelector("strong")!.textContent =
+      `LV ${progression.level}${progression.level === 30 ? ` · M${progression.mastery}` : ""}`;
+    (xpEl.querySelector("i") as HTMLElement).style.width =
+      `${progression.mastery === 100 ? 100 : Math.min(100, (xp / next) * 100)}%`;
+    xpEl.querySelector("small")!.textContent =
+      `${progression.mastery === 100 ? "MAX MASTERY" : `${xp} / ${next} XP`}${progression.points ? ` · ${progression.points} TALENT POINT${progression.points === 1 ? "" : "S"}` : ""}`;
+    this.setText(
+      "#evade-status",
+      s.campaign.shield > 0
+        ? `BARRIER ${Math.ceil(s.campaign.shield)}`
+        : p.dodgeCooldown > 0
+          ? `EVADE ${p.dodgeCooldown.toFixed(1)}s`
+          : "",
+    );
     const interaction = sim.interactable(),
       prompt = this.root.querySelector("#prompt")!;
     prompt.classList.toggle(
@@ -508,11 +631,11 @@ export class UI {
     this.setText(
       "#control-strip",
       this.device === "controller"
-        ? "L2  AIM     R2  FIRE     L1  EQUIPMENT     ⊕  JOURNAL"
-        : "RMB  AIM / LOOK     LMB  FIRE     Q  EQUIPMENT     TAB  JOURNAL",
+        ? "L2  AIM     R2  FIRE     ○  EVADE     L1  EQUIPMENT     ⊕  JOURNAL"
+        : "RMB  AIM / LOOK     LMB  FIRE     V  EVADE     Q  EQUIPMENT     TAB  JOURNAL",
     );
     const marker = this.root.querySelector<HTMLElement>("#waypoint")!;
-    if (view && (exploration || s.stage !== "complete")) {
+    if (view && (contract || exploration || s.stage !== "complete")) {
       const projected = view.project(way.x, way.z, 3.4);
       marker.style.left = projected.x + "px";
       marker.style.top = projected.y + "px";
@@ -567,8 +690,12 @@ export class UI {
       );
       c.stroke();
     }
-    for (const e of s.enemies)
-      if (e.health > 0 && distance(p, e) < 55) {
+    for (const e of [...s.enemies, ...s.campaign.enemies])
+      if (
+        e.health > 0 &&
+        !("captured" in e && e.captured) &&
+        distance(p, e) < 55
+      ) {
         c.fillStyle = "#a24d3b";
         c.beginPath();
         c.arc((e.x - p.x) * scale, (e.z - p.z) * scale, 4, 0, 7);
@@ -577,6 +704,14 @@ export class UI {
     c.fillStyle = "#384c48";
     for (const v of [CAMP, MERCHANT, GRAVE]) {
       c.fillRect((v.x - p.x) * scale - 3, (v.z - p.z) * scale - 3, 6, 6);
+    }
+    for (const hub of HUBS) {
+      const x = (hub.x - p.x) * scale,
+        z = (hub.z - p.z) * scale;
+      c.fillStyle = "#e6ca83";
+      c.fillRect(x - 4, z - 4, 8, 8);
+      c.strokeStyle = "#475c41";
+      c.strokeRect(x - 4, z - 4, 8, 8);
     }
     LANDMARKS.forEach((l, i) => {
       if (distance(p, l) < 90) {
@@ -599,7 +734,8 @@ export class UI {
       c.fill();
     }
     const target =
-      landmarkById(s.explorationTarget) ??
+      campaignNavigation(s)?.position ??
+      destinationById(s.explorationTarget) ??
       (s.mode === "range"
         ? { x: 84, z: 49 }
         : STAGES.find((t) => t.id === s.stage)!.target);

@@ -55,9 +55,12 @@ const shot = async (name) => {
   report.screenshots.push(`${name}.png`);
 };
 try {
-  await page.goto(process.env.GAME_URL || "http://localhost:5188", {
-    waitUntil: "domcontentloaded",
-  });
+  await page.goto(
+    process.env.GAME_URL || process.argv[2] || "http://localhost:5188",
+    {
+      waitUntil: "domcontentloaded",
+    },
+  );
   await page.waitForFunction(() => window.__frontier?.snapshot.ready, {
     timeout: 120000,
   });
@@ -199,10 +202,24 @@ try {
   assert.ok(idleMs >= 9000 && idleMs < 13000, `attract entered in ${idleMs}ms`);
   check(`Attract mode enters after 10 seconds (${idleMs}ms observed)`);
   const startRuns = (await state()).demoRuns;
+  let sawContract = false,
+    sawUpgrade = false;
   let lastStage = "";
   const deadline = Date.now() + 240000;
   while (Date.now() < deadline) {
     const s = await state();
+    if (s.state.campaign.completed > 0) sawContract = true;
+    if (
+      s.state.campaign.items.some(
+        (i) => i.upgrade > 0 && s.state.campaign.equipped[i.slot] === i.id,
+      )
+    )
+      sawUpgrade = true;
+    if (
+      ["board", "equipment"].includes(s.screen) &&
+      !report.screenshots.includes(`verified-demo-${s.screen}.png`)
+    )
+      await shot(`verified-demo-${s.screen}`);
     if (s.state.stage !== lastStage) {
       lastStage = s.state.stage;
       report.stages.push({
@@ -231,6 +248,13 @@ try {
   );
   check(
     "Autonomous browser run completes all mission beats and starts another loop",
+  );
+  assert.ok(
+    sawContract && sawUpgrade,
+    "demo claims a procedural contract and upgrades its reward",
+  );
+  check(
+    "Attract mode completes a hub contract, equips its loot and upgrades it",
   );
   assert.equal(
     await page.evaluate(() =>

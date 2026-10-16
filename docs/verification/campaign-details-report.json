@@ -1,0 +1,106 @@
+{
+  "checks": [
+    "cinder physical hub opens with its faction and services",
+    "sundown physical hub opens with its faction and services",
+    "cottonwood physical hub opens with its faction and services",
+    "Native workshop reforge preserves power and rune while committing a new affix roll",
+    "Native stash stores and withdraws the exact item",
+    "Trading post purchase transfers stock and charges the displayed economy",
+    "Hub respec refunds spent talent points and clears their effects",
+    "High-affix gear, runes, legendary powers and talent screens fit laptop, tablet and ultrawide layouts",
+    "A wounded named outlaw can be captured through the actual world prompt",
+    "A timed evade avoids the native telegraphed lightning impact",
+    "The procedural quest ledger choice advances to the final confrontation",
+    "The branching quest state survives a full browser reload",
+    "No JavaScript or GPU console errors in advanced scenarios"
+  ],
+  "errors": [],
+  "layouts": [
+    {
+      "name": "relic-equipment",
+      "height": 767,
+      "scroll": 767,
+      "overflow": false
+    },
+    {
+      "name": "relic-workshop",
+      "height": 733,
+      "scroll": 733,
+      "overflow": false
+    },
+    {
+      "name": "relic-equipment-laptop",
+      "height": 675,
+      "scroll": 675,
+      "overflow": false
+    },
+    {
+      "name": "relic-workshop-laptop",
+      "height": 665,
+      "scroll": 665,
+      "overflow": false
+    },
+    {
+      "name": "talents-laptop",
+      "height": 563,
+      "scroll": 563,
+      "overflow": false
+    },
+    {
+      "name": "relic-equipment-tablet",
+      "height": 782,
+      "scroll": 782,
+      "overflow": false
+    },
+    {
+      "name": "relic-workshop-tablet",
+      "height": 709,
+      "scroll": 709,
+      "overflow": false
+    },
+    {
+      "name": "talents-tablet",
+      "height": 617,
+      "scroll": 617,
+      "overflow": false
+    },
+    {
+      "name": "relic-equipment-ultrawide",
+      "height": 767,
+      "scroll": 767,
+      "overflow": false
+    },
+    {
+      "name": "relic-workshop-ultrawide",
+      "height": 733,
+      "scroll": 733,
+      "overflow": false
+    },
+    {
+      "name": "talents-ultrawide",
+      "height": 651,
+      "scroll": 651,
+      "overflow": false
+    }
+  ],
+  "screenshots": [
+    "hub-cinder.png",
+    "hub-sundown.png",
+    "hub-cottonwood.png",
+    "relic-equipment.png",
+    "relic-workshop.png",
+    "relic-equipment-laptop.png",
+    "relic-workshop-laptop.png",
+    "talents-laptop.png",
+    "relic-equipment-tablet.png",
+    "relic-workshop-tablet.png",
+    "talents-tablet.png",
+    "relic-equipment-ultrawide.png",
+    "relic-workshop-ultrawide.png",
+    "talents-ultrawide.png",
+    "capture-prompt.png",
+    "hazard-warning.png",
+    "quest-ledger-choice.png"
+  ],
+  "success": true
+}
