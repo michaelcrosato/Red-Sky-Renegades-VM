@@ -414,7 +414,15 @@ Object.defineProperty(window, "__frontier", {
         demoRuns,
         demoCompletions,
         playedSeconds,
-        renderer: renderer?.renderer.backend.constructor.name,
+        renderer: renderer
+          ? (
+              renderer.renderer.backend as unknown as {
+                isWebGPUBackend?: boolean;
+              }
+            ).isWebGPUBackend
+            ? "WebGPUBackend"
+            : "unsupported"
+          : undefined,
         fps: renderer?.fps,
         cameraYaw: renderer?.yaw,
         cameraPitch: renderer?.pitch,
