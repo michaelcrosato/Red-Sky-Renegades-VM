@@ -732,3 +732,59 @@ test("named relics grant a distinct signature bonus beyond a legendary with the 
   item.aspect = "last-stand";
   assert.equal(derivedStats(c).health, 125);
 });
+
+test("Stormcaller cooldown, Blood Price bleeding/healing and Trailblazer mounted effects are functional", () => {
+  const storm = new Simulation();
+  storm.state.campaign.items[0].aspect = "stormcaller";
+  const first = storm.state.enemies[0],
+    second = storm.state.enemies[1];
+  Object.assign(first, { x: 0, z: 50, health: 1000 });
+  Object.assign(second, { x: 2, z: 50, health: 1000 });
+  storm.combat.strike(first, 20, false);
+  const after = second.health;
+  assert.ok(after < 1000);
+  storm.combat.strike(first, 20, false);
+  assert.equal(second.health, after);
+  storm.campaign.tick(4.1);
+  storm.state.weather = "rain";
+  storm.combat.strike(first, 20, false);
+  assert.ok(after - second.health > 1000 - after);
+  const blood = new Simulation();
+  grantXP(blood.state.campaign, 1000);
+  for (let i = 0; i < 3; i++) blood.campaign.gear.learn("steady-hand");
+  blood.state.campaign.items[0].aspect = "blood-price";
+  const victim = blood.state.enemies[0];
+  victim.health = 1000;
+  for (
+    let i = 0;
+    i < 30 && !blood.state.campaign.effects[victim.id]?.bleed;
+    i++
+  )
+    blood.combat.strike(victim, 10, false);
+  assert.ok(blood.state.campaign.effects[victim.id]?.bleed > 0);
+  const hp = victim.health;
+  blood.combat.tick(1);
+  assert.ok(victim.health < hp);
+  blood.state.player.health = 50;
+  blood.combat.strike(victim, 10000, false);
+  assert.equal(blood.state.player.health, 58);
+  const mounted = new Simulation(),
+    normal = new Simulation();
+  mounted.state.campaign.items[0].aspect = "trailblazer";
+  for (const sim of [mounted, normal]) {
+    sim.state.player.mounted = true;
+    sim.state.enemies[0].health = 1000;
+  }
+  mounted.combat.strike(mounted.state.enemies[0], 40, false);
+  normal.combat.strike(normal.state.enemies[0], 40, false);
+  assert.equal(
+    1000 - mounted.state.enemies[0].health,
+    (1000 - normal.state.enemies[0].health) * 1.25,
+  );
+  const controls = emptyControls();
+  controls.moveZ = 1;
+  controls.sprint = true;
+  mounted.update(1, controls, 0);
+  normal.update(1, controls, 0);
+  assert.ok(mounted.state.horse.stamina > normal.state.horse.stamina);
+});

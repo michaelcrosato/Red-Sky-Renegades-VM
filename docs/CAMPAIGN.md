@@ -94,7 +94,7 @@ Limits are explicit: three accepted contracts, two field events, 48 campaign ene
 
 ## Verification
 
-**58 engine tests passed**, covering every activity type through reward turn-in, procedural reproducibility/variation, live capture, quest consequences, real NPC damage, failure/retry, leveling/talents, item effects, weather/status interactions, dodge, crafting, capacity rules, persistence, a 110-contract run, and a full story-plus-campaign attract cycle. Original story/map tests remain in the suite.
+**59 engine tests passed**, covering every activity type through reward turn-in, procedural reproducibility/variation, live capture, quest consequences, real NPC damage, failure/retry, leveling/talents, item effects, weather/status interactions, dodge, crafting, capacity rules, persistence, a 110-contract run, and a full story-plus-campaign attract cycle. Original story/map tests remain in the suite.
 
 Native Windows Chrome with the NVIDIA adapter passed:
 
