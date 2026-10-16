@@ -1,4 +1,5 @@
 import * as T from "three/webgpu";
+import { addCampaignHubs } from "./campaign-view";
 import {
   addTerrain,
   addRoadsAndBridges,
@@ -70,6 +71,7 @@ export function makeWorld(): World {
       return o;
     };
   addTerrain(group);
+  addCampaignHubs(group);
   // A continuous river ribbon and foam on the shallow banks.
   for (const [width, mat, y] of [
     [10, waterMaterial(), -0.9],

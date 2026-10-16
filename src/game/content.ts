@@ -142,6 +142,31 @@ export const TRAIL: Vec2[] = [
 ];
 export const FIELD_GUIDE = [
   {
+    title: "The dispatch network",
+    copy: "Visit the boards at Cinder Creek, Sundown Relay and Cottonwood Crossing. Browse notices, accept up to three contracts, then return to the issuer to claim your pay and equipment. The contract journal tracks field events as well as your jobs.",
+    keys: "E at a board · Escape → Contract journal · Left / Right to browse",
+  },
+  {
+    title: "Make a build of your own",
+    copy: "Earn XP from combat, exploration and work. Levels grant talent points across Gunslinger, Warden and Outrider paths. Equipment adds affixes, legendary powers, runes and set bonuses that change your combat and riding.",
+    keys: "Escape → Equipment & talents · L1/R1 or [ / ] changes slot or path",
+  },
+  {
+    title: "Nothing goes to waste",
+    copy: "Collect loot from the ground. At a hub, store spares, salvage unequipped gear, temper it to +5, reforge its final affix, etch a rune, or brew tonics. Use the workshop’s recipe selector to review the cost before applying it.",
+    keys: "E picks up loot · Left / Right selects gear · [ / ] selects recipe",
+  },
+  {
+    title: "Read the danger",
+    copy: "Elite outlaws can be armored, frenzied, vampiric or elemental. Step out of gold warning circles before they turn red. Circle evades at a stamina cost. Wounded bounty leaders surrender below 30% health; approach to capture them alive.",
+    keys: "Circle / V evade · Triangle / E capture · R3 / F Focus",
+  },
+  {
+    title: "A territory that remembers",
+    copy: "Deliveries rebuild supply; raids and bounties reduce danger. Ignored crises and time increase pressure. Those conditions influence new jobs, field events and prices. Higher challenge tiers unlock at levels 5, 10 and 15, with stronger enemies and richer loot.",
+    keys: "Dispatch board → Challenge tier · Refresh notices for $5",
+  },
+  {
     title: "Beyond Cinder Creek",
     copy: "Eight frontier landmarks wait beyond camp. Open the journal and use D-pad Left or Right to choose a destination. Cross tracks it on your compass. Camps restore your cores; trail markers tell the territory’s stories.",
     keys: "Tab · Left / Right arrows · Enter to track",

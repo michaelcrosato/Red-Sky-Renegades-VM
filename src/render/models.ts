@@ -23,21 +23,24 @@ export interface HumanRig {
 }
 export function human(
   kind: "player" | "enemy" | "ada" | "trader" | "boss" = "player",
+  tint?: string,
 ): HumanRig {
   const root = new T.Group(),
     body = new T.Group();
   root.add(body);
   const isPlayer = kind === "player",
     ada = kind === "ada";
-  const coat = isPlayer
-    ? "#405553"
-    : ada
-      ? "#b67c4c"
-      : kind === "trader"
-        ? "#879080"
-        : kind === "boss"
-          ? "#875b47"
-          : "#865145";
+  const coat =
+    tint ??
+    (isPlayer
+      ? "#405553"
+      : ada
+        ? "#b67c4c"
+        : kind === "trader"
+          ? "#879080"
+          : kind === "boss"
+            ? "#875b47"
+            : "#865145");
   const legs: T.Group[] = [],
     arms: T.Group[] = [];
   for (const side of [-1, 1]) {

@@ -1,5 +1,7 @@
 # Engine handoff
 
+The campaign extension is documented in [CAMPAIGN.md](CAMPAIGN.md), including the objective grammar, generators, build systems, renderer, UI and verification.
+
 ## Start here
 
 - `npm ci && npm run dev` serves port 5188.
@@ -64,7 +66,7 @@ Weapon capacity, damage, cooldown, reload time and range come from `WEAPONS`. Th
 
 ## Intentional scope
 
-- Single-player, local saves, one authored mission and one practice area.
+- Single-player, local saves, one authored mission, a practice area, and a repeatable procedural campaign across the territory.
 - Kinematic ground movement and circular obstacle collision. No Rapier is needed for this content. Bridge height is a shared explicit walkable surface; the river slows travel.
 - Hitscan combat with aim assistance and visible tracers. Cover blocks both incoming and outgoing shots.
 - Witnessed gunfire near camp changes honor, bounty and search heat. Leave the area to cool the search; camp rest is unavailable during heat. This slice does not spawn police or simulate a town population.

@@ -30,8 +30,19 @@ import { type Controls, type GameEvent, type GameState } from "./types";
 import { lastGoodDeed } from "../game/mission";
 import type { MissionGraph } from "./mission";
 import { LANDMARKS, landmarkById } from "../game/territory";
+import { newCampaign } from "./campaign/state";
+import { CampaignRuntime } from "./campaign/runtime";
+import { CampaignCombat } from "./campaign/combat";
+import { supplyPrice } from "./campaign/gear";
+import { ENEMY_FAMILIES } from "../game/campaign/catalog";
+import { steerAround } from "./campaign/navigation";
+import type { CampaignEnemy } from "./campaign/types";
+import { destinationById } from "../game/destinations";
 
-export function newGame(mode: "story" | "range" = "story"): GameState {
+export function newGame(
+  mode: "story" | "range" = "story",
+  seed = 7311893,
+): GameState {
   return {
     version: 1,
     mode,
@@ -53,6 +64,10 @@ export function newGame(mode: "story" | "range" = "story"): GameState {
       reload: 0,
       shot: 0,
       invulnerable: 0,
+      dodge: 0,
+      dodgeCooldown: 0,
+      evadeX: 0,
+      evadeZ: 0,
       animation: 0,
       speed: 0,
     },
@@ -107,6 +122,7 @@ export function newGame(mode: "story" | "range" = "story"): GameState {
     completedAt: null,
     discovered: [],
     explorationTarget: null,
+    campaign: newCampaign(seed),
     targets: Array.from({ length: 5 }, (_, i) => ({
       x: 70 + i * 5,
       z: 30 - (i % 2) * 5,
@@ -131,11 +147,20 @@ export class Simulation {
   private stepSound = 0;
   private lastCrime = -10;
   private shotId = 0;
+  readonly campaign: CampaignRuntime;
+  readonly combat: CampaignCombat;
   constructor(
     state = newGame(),
     readonly mission: MissionGraph<StageId> = lastGoodDeed,
   ) {
     this.state = structuredClone(state);
+    this.campaign = new CampaignRuntime(this.state, (e) => this.emit(e));
+    this.combat = new CampaignCombat(this.state, this.campaign, (e) =>
+      this.emit(e),
+    );
+  }
+  allEnemies() {
+    return this.campaign.allEnemies();
   }
   emit(e: GameEvent) {
     this.events.push(e);
@@ -234,6 +259,8 @@ export class Simulation {
         kind: "wagon",
         position: WAGON,
       };
+    const campaignInteraction = this.campaign.interaction();
+    if (campaignInteraction) return campaignInteraction;
     if (nearby(MERCHANT))
       return {
         label: "Trade with Elias",
@@ -295,6 +322,14 @@ export class Simulation {
       t = this.interactable();
     if (!t) return;
     this.emit({ type: "sound", name: "click" });
+    if (
+      ["hub:", "objective:", "loot:", "capture:"].some((prefix) =>
+        t.kind.startsWith(prefix),
+      )
+    ) {
+      this.campaign.interact(t.kind);
+      return;
+    }
     if (t.kind === "ada") {
       if (s.stage === "meet")
         this.say(
@@ -307,6 +342,8 @@ export class Simulation {
         s.inventory.dollars += 65;
         s.honor += 15;
         s.completedAt = s.elapsed;
+        this.campaign.awardXP(250);
+        s.campaign.engaged = true;
         this.signal("supplies-delivered");
         this.emit({ type: "complete" });
         this.emit({ type: "sound", name: "complete" });
@@ -363,7 +400,8 @@ export class Simulation {
         });
         return;
       }
-      p.health = p.stamina = p.focus = s.horse.stamina = 100;
+      p.health = this.campaign.stats.health;
+      p.stamina = p.focus = s.horse.stamina = 100;
       s.time = 16.6;
       s.horse.bond = clamp(s.horse.bond + 15, 0, 100);
       this.emit({
@@ -384,6 +422,7 @@ export class Simulation {
     } else if (t.kind.startsWith("herb-")) {
       s.herbs[Number(t.kind.slice(5))] = true;
       s.inventory.herbs++;
+      s.campaign.materials.herbs += 2;
       s.inventory.tonics++;
       this.emit({
         type: "toast",
@@ -408,7 +447,8 @@ export class Simulation {
       const place = landmarkById(t.kind.slice(9));
       if (!place) return;
       if (place.kind === "camp") {
-        p.health = p.stamina = p.focus = s.horse.stamina = 100;
+        p.health = this.campaign.stats.health;
+        p.stamina = p.focus = s.horse.stamina = 100;
         this.emit({
           type: "toast",
           title: "A place to rest",
@@ -430,14 +470,15 @@ export class Simulation {
     }
   }
   navigateTo(id: string | null) {
-    if (id !== null && !landmarkById(id)) return false;
+    if (id !== null && !destinationById(id)) return false;
     this.state.explorationTarget = id;
+    this.state.campaign.tracked = null;
     this.checkpoint();
     return true;
   }
   buy(item: "tonic" | "ammo") {
     const s = this.state,
-      price = item === "tonic" ? 8 : 6;
+      price = supplyPrice(s, item);
     if (distance(s.player, MERCHANT) > 4) return false;
     if (s.inventory.dollars < price) {
       this.emit({ type: "toast", title: "Not enough dollars" });
@@ -456,9 +497,10 @@ export class Simulation {
   heal() {
     const s = this.state,
       p = s.player;
-    if (!s.inventory.tonics || p.health >= 100) return;
+    const stats = this.campaign.stats;
+    if (!s.inventory.tonics || p.health >= stats.health) return;
     s.inventory.tonics--;
-    p.health = clamp(p.health + 65, 0, 100);
+    p.health = clamp(p.health + 65 * (1 + stats.tonic / 100), 0, stats.health);
     p.focus = clamp(p.focus + 25, 0, 100);
     this.emit({ type: "sound", name: "tonic" });
     this.emit({
@@ -471,10 +513,11 @@ export class Simulation {
     const s = this.state,
       p = s.player,
       w = WEAPONS[p.weapon];
-    return s.enemies
+    return this.allEnemies()
       .filter(
         (e) =>
           e.health > 0 &&
+          !("captured" in e && e.captured) &&
           distance(p, e) < w.range &&
           Math.abs(angleDelta(yaw, angleTo(p, e))) < 0.38 &&
           !lineBlocked(p, e, OBSTACLES, p.mounted ? 2.1 : 1.3),
@@ -502,9 +545,10 @@ export class Simulation {
     this.shotId++;
     const target = p.aiming
       ? this.aimTarget(yaw)
-      : s.enemies.find(
+      : this.allEnemies().find(
           (e) =>
             e.health > 0 &&
+            !("captured" in e && e.captured) &&
             distance(p, e) < 22 &&
             Math.abs(angleDelta(yaw, angleTo(p, e))) < 0.14 &&
             !lineBlocked(p, e, OBSTACLES),
@@ -515,19 +559,11 @@ export class Simulation {
         z: p.z + Math.cos(yaw) * w.range,
       };
     if (target) {
-      target.health -= w.damage * (p.focusing ? 1.55 : 1);
-      target.awareness = 1;
-      target.state = "attack";
+      this.combat.strike(target, w.damage, p.focusing);
       to = target;
       hit = true;
       s.hits++;
       this.emit({ type: "sound", name: "hit" });
-      if (target.health <= 0) {
-        target.state = "dead";
-        target.speed = 0;
-        s.kills++;
-        p.focus = clamp(p.focus + 16, 0, 100);
-      }
     }
     if (s.mode === "range")
       for (const t of s.targets)
@@ -550,7 +586,7 @@ export class Simulation {
       enemy: false,
       mounted: p.mounted,
     });
-    for (const e of s.enemies)
+    for (const e of this.allEnemies())
       if (e.health > 0 && distance(p, e) < 55) {
         e.awareness = 1;
         e.state = "investigate";
@@ -576,19 +612,43 @@ export class Simulation {
       p.reserve[p.weapon] <= 0
     )
       return;
-    p.reload = w.reload;
+    p.reload = w.reload / (1 + this.campaign.stats.reload / 100);
     this.emit({ type: "sound", name: "reload" });
   }
   update(dt: number, c: Controls, yaw: number) {
     const s = this.state,
       p = s.player;
     if (p.health <= 0 || this.pendingChoice || this.pendingDialogue) return;
+    const stats = this.campaign.stats;
+    p.health = Math.min(p.health, stats.health);
     if (c.focus && p.focus > 5) p.focusing = !p.focusing;
     const worldDt = dt * (p.focusing ? 0.32 : 1);
+    this.campaign.tick(worldDt);
+    this.combat.tick(worldDt);
+    p.dodge = Math.max(0, p.dodge - dt);
+    p.dodgeCooldown = Math.max(0, p.dodgeCooldown - dt);
+    if (
+      c.dodge &&
+      p.dodgeCooldown <= 0 &&
+      (p.mounted ? s.horse.stamina : p.stamina) >= 18
+    ) {
+      const mx = Math.sin(yaw) * c.moveZ - Math.cos(yaw) * c.moveX,
+        mz = Math.cos(yaw) * c.moveZ + Math.sin(yaw) * c.moveX,
+        len = Math.hypot(mx, mz);
+      p.evadeX = len > 0.1 ? mx / len : -Math.sin(yaw);
+      p.evadeZ = len > 0.1 ? mz / len : -Math.cos(yaw);
+      p.dodge = 0.32;
+      p.dodgeCooldown = 1.2 * (1 - stats.evade / 100);
+      p.invulnerable = Math.max(p.invulnerable, 0.3);
+      if (p.mounted) s.horse.stamina -= 18;
+      else p.stamina -= 18;
+    }
     s.elapsed += dt;
     for (const place of LANDMARKS)
       if (distance(p, place) < 18 && !s.discovered.includes(place.id)) {
         s.discovered.push(place.id);
+        this.campaign.awardXP(12);
+        s.campaign.engaged = true;
         this.emit({
           type: "toast",
           title: place.name,
@@ -604,9 +664,10 @@ export class Simulation {
       s.weatherTime = 0;
     }
     if (p.focusing) {
-      p.focus = Math.max(0, p.focus - dt * 15);
+      p.focus = Math.max(0, p.focus - dt * 15 * (1 - stats.focus / 100));
       if (p.focus <= 0) p.focusing = false;
-    } else p.focus = clamp(p.focus + dt * 2.6, 0, 100);
+    } else
+      p.focus = clamp(p.focus + dt * 2.6 * (1 + stats.focus / 100), 0, 100);
     p.invulnerable = Math.max(0, p.invulnerable - dt);
     p.shot = Math.max(0, p.shot - dt);
     if (p.reload > 0) {
@@ -628,7 +689,7 @@ export class Simulation {
       this.emit({ type: "sound", name: "whistle" });
       this.emit({ type: "toast", title: "Juniper is on her way" });
     }
-    const len = Math.min(1, Math.hypot(c.moveX, c.moveZ)),
+    const len = p.dodge > 0 ? 1 : Math.min(1, Math.hypot(c.moveX, c.moveZ)),
       sprinting = c.sprint && !p.aiming && len > 0.1;
     const core = p.mounted ? s.horse.stamina : p.stamina,
       boost = sprinting && core > 5;
@@ -641,10 +702,20 @@ export class Simulation {
         : boost
           ? 7.1
           : 4.2;
+    speed *= p.mounted
+      ? 1 + Math.min(0.3, stats.ride / 250)
+      : 1 + stats.move / 100;
+    if (p.dodge > 0) speed *= 2.3;
     const inWater = Math.abs(p.x - riverX(p.z)) < 5.3 && !crossingAt(p.x, p.z);
     if (inWater) speed *= 0.48;
-    const mx = Math.sin(yaw) * c.moveZ - Math.cos(yaw) * c.moveX,
-      mz = Math.cos(yaw) * c.moveZ + Math.sin(yaw) * c.moveX;
+    const mx =
+        p.dodge > 0
+          ? p.evadeX
+          : Math.sin(yaw) * c.moveZ - Math.cos(yaw) * c.moveX,
+      mz =
+        p.dodge > 0
+          ? p.evadeZ
+          : Math.cos(yaw) * c.moveZ + Math.sin(yaw) * c.moveX;
     p.speed = speed * len;
     if (len > 0.05) {
       const desired = Math.atan2(mx, mz);
@@ -672,7 +743,14 @@ export class Simulation {
     if (p.aiming) p.yaw = yaw;
     p.stamina = clamp(p.stamina + dt * (!p.mounted && boost ? -11 : 8), 0, 100);
     s.horse.stamina = clamp(
-      s.horse.stamina + dt * (p.mounted && boost ? -5.5 : 6),
+      s.horse.stamina +
+        dt *
+          (p.mounted && boost
+            ? -5.5 /
+              (1 +
+                stats.ride / 100 +
+                (stats.aspects.includes("trailblazer") ? 0.4 : 0))
+            : 6),
       0,
       100,
     );
@@ -705,7 +783,7 @@ export class Simulation {
         s.horse.animation += dt * s.horse.speed * 0.65;
       }
     } else s.horse.speed = 0;
-    if (c.fire) this.shoot(yaw);
+    if (c.fire && p.dodge <= 0) this.shoot(yaw);
     if (distance(p, { x: 39, z: -29 }) < 25) this.signal("site-reached");
     if (s.stage === "fight" && s.enemies.every((e) => e.health <= 0)) {
       this.signal("gang-defeated");
@@ -715,12 +793,34 @@ export class Simulation {
         text: "The gang leader drops his weapon.",
       });
     }
-    for (let i = 0; i < s.enemies.length; i++) {
-      const e = s.enemies[i];
-      if (e.health <= 0) continue;
-      const d = distance(e, p),
-        visible = d < 38 && !lineBlocked(e, p, OBSTACLES);
-      if (visible && d < 27) e.awareness = clamp(e.awareness + worldDt * 0.9);
+    const foes = this.allEnemies();
+    for (let i = 0; i < foes.length; i++) {
+      const e = foes[i],
+        dynamic = "owner" in e ? (e as CampaignEnemy) : null;
+      if (e.health <= 0 || dynamic?.captured) continue;
+      if (dynamic?.boss && e.health <= dynamic.maxHealth * 0.3) {
+        e.speed = 0;
+        e.yaw = angleTo(e, p);
+        continue;
+      }
+      const protect = dynamic
+        ? s.campaign.objects.find(
+            (o) =>
+              o.owner === dynamic.owner &&
+              !o.used &&
+              o.health > 0 &&
+              (o.kind === "wagon" || o.kind === "survivor"),
+          )
+        : undefined;
+      const target =
+        protect &&
+        distance(e, protect) < 35 &&
+        (distance(e, p) > 15 || i % 2 === 0)
+          ? protect
+          : p;
+      const d = distance(e, target),
+        visible = d < 43 && !lineBlocked(e, target, OBSTACLES);
+      if (visible && d < 32) e.awareness = clamp(e.awareness + worldDt * 0.9);
       else e.awareness = Math.max(0, e.awareness - worldDt * 0.06);
       if (e.awareness >= 0.8) e.state = visible ? "attack" : "flank";
       let dest: Vec2 = e.home;
@@ -731,55 +831,74 @@ export class Simulation {
         };
       else if (e.state === "flank" || e.state === "investigate")
         dest = {
-          x: p.x + Math.cos(i * 2.4) * 8,
-          z: p.z + Math.sin(i * 2.4) * 8,
+          x: target.x + Math.cos(i * 2.4) * 8,
+          z: target.z + Math.sin(i * 2.4) * 8,
         };
       else if (e.state === "attack")
         dest =
-          d > 21 ? p : { x: e.x + Math.sin(s.elapsed * 0.5 + i) * 0.2, z: e.z };
-      const travel = distance(e, dest);
-      e.speed = travel > 0.8 ? (e.state === "patrol" ? 1.2 : 2.5) : 0;
+          d > 21
+            ? target
+            : { x: e.x + Math.sin(s.elapsed * 0.5 + i) * 0.2, z: e.z };
+      if (dynamic && distance(e, dest) > 1) dest = steerAround(e, dest);
+      const chilled = (s.campaign.effects[e.id]?.chill ?? 0) > 0 ? 0.55 : 1;
+      const family = dynamic
+        ? ENEMY_FAMILIES[dynamic.family as keyof typeof ENEMY_FAMILIES]
+        : null;
+      const frenzy = dynamic?.modifiers.includes("frenzied") ? 1.3 : 1;
+      e.speed =
+        distance(e, dest) > 0.8
+          ? (e.state === "patrol" ? 1.2 : 2.5) *
+            (family?.speed ?? 1) *
+            frenzy *
+            chilled
+          : 0;
       if (e.speed) {
-        const a = angleTo(e, dest);
+        const angle = angleTo(e, dest);
         Object.assign(
           e,
           moveWithCollision(
             e,
-            Math.sin(a) * e.speed * worldDt,
-            Math.cos(a) * e.speed * worldDt,
+            Math.sin(angle) * e.speed * worldDt,
+            Math.cos(angle) * e.speed * worldDt,
             OBSTACLES,
             0.45,
           ),
         );
-        e.yaw = a;
+        e.yaw = angle;
         e.animation += worldDt * e.speed * 1.8;
       }
       if (e.awareness > 0.7) {
-        e.yaw = angleTo(e, p);
-        e.cooldown -= worldDt;
+        e.yaw = angleTo(e, target);
+        e.cooldown -= worldDt * chilled;
+        if (dynamic)
+          this.combat.enemyAbility(dynamic, worldDt * chilled, target);
         if (e.cooldown <= 0 && visible && d < 43) {
-          e.cooldown = 2.6 + i * 0.19;
-          const moving = p.speed > 5,
-            covered = lineBlocked(e, p, OBSTACLES, 1),
+          e.cooldown = (2.6 + (dynamic ? (i % 5) * 0.15 : i * 0.19)) / frenzy;
+          const moving =
+              target === p ? p.speed > 5 : protect?.kind === "survivor",
+            covered = lineBlocked(e, target, OBSTACLES, 1),
             hit =
               (this.shotId + i + Math.floor(s.elapsed)) % 5 >
                 (moving ? 2 : 0) && !covered;
           this.emit({
             type: "shot",
             from: { x: e.x, z: e.z },
-            to: { x: p.x + (hit ? 0 : 2.5), z: p.z + (hit ? 0 : 1.7) },
+            to: {
+              x: target.x + (hit ? 0 : 2.5),
+              z: target.z + (hit ? 0 : 1.7),
+            },
             hit,
             enemy: true,
           });
-          if (hit && p.invulnerable <= 0) {
-            const damage = 8;
-            p.health = Math.max(0, p.health - damage);
-            p.invulnerable = 0.3;
-            this.emit({ type: "damage", amount: damage });
-            if (p.health <= 0) {
-              s.deaths++;
-              this.emit({ type: "death" });
+          if (hit) {
+            let damage = dynamic?.damage ?? 8;
+            if (target === p) damage = this.combat.damagePlayer(damage);
+            else if (protect) {
+              damage *= 0.65;
+              protect.health = Math.max(0, protect.health - damage);
             }
+            if (dynamic?.modifiers.includes("vampiric"))
+              e.health = Math.min(dynamic.maxHealth, e.health + damage * 0.6);
           }
         }
       }

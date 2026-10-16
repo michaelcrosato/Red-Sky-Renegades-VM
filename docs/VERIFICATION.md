@@ -1,10 +1,10 @@
 # Verification record
 
-Date: **2026-10-16**. This record distinguishes actual gameplay rendering from compatibility screens and simulated controller input from a physical controller test.
+Date: **2026-10-16**. The current campaign adds 37 engine cases and new native browser journeys; see [CAMPAIGN.md](CAMPAIGN.md) for the current feature-by-feature evidence. Earlier slice and map results below are retained as historical checks. This record distinguishes actual gameplay rendering from compatibility screens and simulated controller input from a physical controller test.
 
 ## Automated engine checks
 
-`npm run check` runs **22 passing tests**, strict TypeScript compilation, and the production Vite build. The original 15 tests cover the systems below; seven expansion tests additionally verify exact area, trail traversal/connectivity, all crossings, expanded saves, discoveries and atlas coordinates. See [the expansion record](MAP-EXPANSION.md) for the new browser evidence.
+`npm run check` runs **59 passing tests**, strict TypeScript compilation, and the production Vite build. The original 15 tests cover the systems below; seven expansion tests additionally verify exact area, trail traversal/connectivity, all crossings, expanded saves, discoveries and atlas coordinates. See [the expansion record](MAP-EXPANSION.md) for the new browser evidence.
 
 - Complete story progression through all nine mission states, five defeated outlaws, the mercy choice, supply delivery, rewards and the ending.
 - Three fresh autonomous cycles using ordinary gameplay commands.

@@ -7,6 +7,8 @@ import {
 } from "../game/territory";
 import { riverX, type Vec2 } from "../engine/math";
 import type { GameState } from "../engine/types";
+import { HUBS } from "../game/campaign/catalog";
+import { campaignNavigation } from "../engine/campaign/queries";
 
 export const mapPoint = (p: Vec2) => ({
   x: 24 + ((p.x + MAP_HALF_EXTENT) / MAP_SIZE) * 372,
@@ -28,7 +30,9 @@ export function territoryMap(s: GameState, selected: number) {
     camp = mapPoint(CAMP),
     post = mapPoint(POST),
     goal = mapPoint(STAGES.find((t) => t.id === s.stage)!.target);
-  return `<svg viewBox="0 0 420 440" role="img" aria-label="Full Cinder Creek territory with eight frontier destinations and three river crossings">
+  const task = campaignNavigation(s),
+    taskPoint = task ? mapPoint(task.position) : null;
+  return `<svg viewBox="0 0 420 440" role="img" aria-label="Cinder Creek territory, eight landmarks, three dispatch hubs and tracked contract">
   <defs><clipPath id="territory-border"><rect x="24" y="24" width="372" height="372" rx="3"/></clipPath></defs>
   <g clip-path="url(#territory-border)"><rect x="24" y="24" width="372" height="372" fill="#c4b389"/><path d="M24 24H210L170 170H24Z" fill="#a4ad83" opacity=".7"/><path d="M260 24H396V260L300 215Z" fill="#b99b6b" opacity=".6"/><path d="M240 280L396 255V396H215Z" fill="#d7c9a1"/>
   <path class="map-river" d="${path(rivers)}"/>
@@ -40,6 +44,12 @@ export function territoryMap(s: GameState, selected: number) {
   }).join("")}
   <circle cx="${camp.x}" cy="${camp.y}" r="3.5"/><text x="${camp.x - 7}" y="${camp.y + 16}" text-anchor="end">CINDER CREEK</text>
   <circle cx="${post.x}" cy="${post.y}" r="3.5"/><text x="${post.x + 8}" y="${post.y - 9}">MERCY STATION</text>
+  ${HUBS.map((h, i) => {
+    const p = mapPoint(h),
+      active = selected === LANDMARKS.length + i + 1;
+    return `<g class="hub-map-point" data-hub="${h.id}" transform="translate(${p.x},${p.y})">${active ? '<circle r="11" fill="#ac4f36" stroke="#f4d796"/>' : ""}<path d="M-5 0L0-5 5 0V6H-5Z" fill="${active ? "#f1dfb1" : "#536b5b"}" stroke="#d9c99c" stroke-width="1"/></g>`;
+  }).join("")}
+  ${taskPoint ? `<circle cx="${taskPoint.x}" cy="${taskPoint.y}" r="6" fill="#edc46e" stroke="#9e5940" stroke-width="2"/>` : ""}
   ${selected === 0 ? `<path d="M${goal.x} ${goal.y - 7}l7 7-7 7-7-7Z" fill="#eac879" stroke="#66543b"/>` : ""}
   <path class="map-player" d="M0 -7L-4.5 5 0 2 4.5 5Z" transform="translate(${player.x},${player.y}) rotate(${180 - (s.player.yaw * 180) / Math.PI})"/>
   </g><rect x="24" y="24" width="372" height="372" rx="3" fill="none" stroke="#7c7956" stroke-width="1"/>

@@ -2,6 +2,10 @@ import { newGame } from "./simulation";
 import type { GameState } from "./types";
 import { STAGES } from "../game/content";
 import { SAVE_POSITION_LIMIT, landmarkById } from "../game/territory";
+import { newCampaign } from "./campaign/state";
+import { validCampaign } from "./campaign/validation";
+import { derivedStats } from "./campaign/progression";
+import { destinationById } from "../game/destinations";
 export interface StorageLike {
   getItem(k: string): string | null;
   setItem(k: string, v: string): void;
@@ -53,7 +57,7 @@ export function validSave(value: unknown): value is GameState {
     STAGES.some((t) => t.id === s.stage) &&
     actor(p) &&
     p.health > 0 &&
-    p.health <= 100 &&
+    p.health <= 1000 &&
     finite(p.stamina, 0, 100) &&
     finite(p.focus, 0, 100) &&
     ["focusing", "mounted", "aiming"].every(
@@ -66,6 +70,9 @@ export function validSave(value: unknown): value is GameState {
       count,
     ) &&
     [p.reload, p.shot, p.invulnerable].every((n) => finite(n, 0)) &&
+    [p.dodge, p.dodgeCooldown].every((n) => finite(n, 0)) &&
+    finite(p.evadeX, -1, 1) &&
+    finite(p.evadeZ, -1, 1) &&
     actor(h) &&
     finite(h.stamina, 0, 100) &&
     finite(h.bond, 0, 100) &&
@@ -104,7 +111,8 @@ export function validSave(value: unknown): value is GameState {
     new Set(s.discovered).size === s.discovered.length &&
     (s.explorationTarget === null ||
       (typeof s.explorationTarget === "string" &&
-        !!landmarkById(s.explorationTarget)))
+        !!destinationById(s.explorationTarget))) &&
+    validCampaign(s.campaign)
   );
 }
 export class SaveStore {
@@ -119,6 +127,11 @@ export class SaveStore {
       if (data?.version === 1) {
         if (data.discovered === undefined) data.discovered = [];
         if (data.explorationTarget === undefined) data.explorationTarget = null;
+        if (data.campaign === undefined) data.campaign = newCampaign();
+        if (data.player) {
+          for (const key of ["dodge", "dodgeCooldown", "evadeX", "evadeZ"])
+            if (data.player[key] === undefined) data.player[key] = 0;
+        }
       }
       return validSave(data) ? data : null;
     } catch {
@@ -175,9 +188,18 @@ export class SaveStore {
 }
 export function recoveredSave(s: GameState | null) {
   const next = structuredClone(s ?? newGame());
-  next.player.health = Math.max(70, next.player.health);
+  next.player.health = Math.min(
+    derivedStats(next.campaign, next.player.weapon).health,
+    Math.max(
+      derivedStats(next.campaign, next.player.weapon).health * 0.7,
+      next.player.health,
+    ),
+  );
   next.player.focusing = false;
   next.player.reload = 0;
   next.player.invulnerable = 2;
+  next.player.dodge = 0;
+  next.player.dodgeCooldown = 0;
+  next.player.evadeX = next.player.evadeZ = 0;
   return next;
 }

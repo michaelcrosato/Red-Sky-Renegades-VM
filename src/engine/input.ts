@@ -119,6 +119,8 @@ export class Input {
     c.focus = edge("KeyF");
     c.whistle = edge("KeyH");
     c.tonic = edge("KeyC");
+    c.dodge = edge("KeyV");
+    c.page = Number(edge("BracketRight")) - Number(edge("BracketLeft"));
     c.wheel = k("KeyQ");
     c.pause = edge("Escape");
     c.journal = edge("Tab");
@@ -160,6 +162,8 @@ export class Input {
       c.journal ||= rise(8);
       c.confirm ||= rise(0);
       c.back ||= rise(1);
+      c.dodge ||= rise(1);
+      c.page += Number(rise(5)) - Number(rise(4));
       if (rise(5)) c.weapon = "rifle";
       if (rise(14)) c.weapon = "revolver";
       if (rise(15)) c.weapon = "rifle";

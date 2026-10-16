@@ -1,5 +1,6 @@
 import type { Vec2 } from "./math";
 import type { StageId, WeaponId } from "../game/content";
+import type { CampaignState, HubId } from "./campaign/types";
 export interface Controls {
   moveX: number;
   moveZ: number;
@@ -20,6 +21,8 @@ export interface Controls {
   back: boolean;
   navX: number;
   navY: number;
+  dodge: boolean;
+  page: number;
   weapon?: WeaponId;
 }
 export const emptyControls = (): Controls => ({
@@ -42,6 +45,8 @@ export const emptyControls = (): Controls => ({
   back: false,
   navX: 0,
   navY: 0,
+  dodge: false,
+  page: 0,
 });
 export interface Actor extends Vec2 {
   id: string;
@@ -69,6 +74,10 @@ export interface Player extends Actor {
   reload: number;
   shot: number;
   invulnerable: number;
+  dodge: number;
+  dodgeCooldown: number;
+  evadeX: number;
+  evadeZ: number;
 }
 export interface Inventory {
   tonics: number;
@@ -102,6 +111,7 @@ export interface GameState {
   completedAt: number | null;
   discovered: string[];
   explorationTarget: string | null;
+  campaign: CampaignState;
 }
 export type GameEvent =
   | { type: "toast"; title: string; text?: string }
@@ -135,4 +145,8 @@ export type GameEvent =
   | { type: "complete" }
   | { type: "choice" }
   | { type: "shop" }
-  | { type: "stage"; stage: StageId };
+  | { type: "stage"; stage: StageId }
+  | { type: "hub"; hub: HubId }
+  | { type: "campaign-choice"; contract: string }
+  | { type: "level-up"; level: number }
+  | { type: "loot"; rarity: string; name: string };

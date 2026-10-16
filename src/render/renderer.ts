@@ -30,6 +30,7 @@ import {
 } from "./models";
 import { makeWorld, type World } from "./world";
 import { box, sphere, toon } from "./materials";
+import { CampaignView } from "./campaign-view";
 
 interface Particle {
   mesh: T.Mesh;
@@ -43,6 +44,7 @@ export class FrontierRenderer {
   camera = new T.PerspectiveCamera(55, 1, 0.15, 1500);
   post!: T.PostProcessing;
   world!: World;
+  campaignView!: CampaignView;
   player = human();
   horse = horse();
   enemies: HumanRig[] = [];
@@ -94,6 +96,7 @@ export class FrontierRenderer {
       throw new Error("A WebGPU adapter is required.");
     this.world = makeWorld();
     this.scene.add(this.world.group, this.player.root, this.horse.root);
+    this.campaignView = new CampaignView(this.scene);
     for (let i = 0; i < 5; i++) {
       const rig = human("enemy");
       this.enemies.push(rig);
@@ -306,6 +309,8 @@ export class FrontierRenderer {
     );
     this.player.gun.scale.z = p.weapon === "rifle" ? 2.3 : 1;
     this.player.gun.rotation.x -= p.shot * 0.35;
+    this.player.body.rotation.x = p.dodge > 0 && !p.mounted ? -0.65 : 0;
+    this.campaignView.update(s, this.elapsed);
     const h = s.horse;
     this.horse.root.position.set(h.x, groundHeight(h.x, h.z), h.z);
     this.horse.root.rotation.y = h.yaw;

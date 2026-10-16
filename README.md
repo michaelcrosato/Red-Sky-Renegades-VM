@@ -6,6 +6,14 @@ An original cel-shaded Western adventure built with **Three.js r180 and WebGPU**
 
 [Play the game](https://michaelcrosato.github.io/Red-Sky-Renegades-VM/) · [Engine handoff](docs/HANDOFF.md) · [Controls](docs/CONTROLS.md) · [Verification](docs/VERIFICATION.md)
 
+## A living frontier campaign
+
+Three dispatch hubs now offer generated **bounties, raids, recovery jobs, courier runs, escorts, defenses, salvage, surveys, supply runs and branching quests**. Regional threat and supply shape new work, roadside events and prices.
+
+Build a character through 30 levels, mastery, three talent paths and six equipment slots. Find affixed gear in five rarities, legendary powers, named relic bonuses, runes and sets. Compare, equip, salvage, upgrade, reforge, socket and trade equipment at the hubs. Existing stories migrate automatically.
+
+**Start at the dispatch board beside Juniper in Cinder Creek**, or track a dispatch hub in the atlas. [Campaign guide, architecture and evidence](docs/CAMPAIGN.md).
+
 ## The Last Good Deed
 
 One complete frontier mission, with a free-roaming territory around it:
@@ -19,7 +27,7 @@ One complete frontier mission, with a free-roaming territory around it:
 
 Explore the trader, campfire, prairie sage, enemy saddlebags, a forgotten memorial, wildlife, and the consequences of firing near camp. The separate **Proving Ground** provides resettable targets, full equipment, and room to practice riding and combat.
 
-The title screen becomes an autonomous store demo after **10 seconds without input**. Its director plays the actual mission using the same simulation commands as a human player, resolves dialogue and the mercy decision, completes the story, and begins again. Keyboard, pointer, touch, or active gamepad input returns immediately to the title. Demo sessions never write to your story save.
+The title screen becomes an autonomous store demo after **10 seconds without input**. Its director plays the actual mission using the same simulation commands as a human player, resolves dialogue and the mercy decision, completes the story, performs a generated hub contract, equips and upgrades its reward, and begins again. Keyboard, pointer, touch, or active gamepad input returns immediately to the title. Demo sessions never write to your story save.
 
 ## Play locally
 
@@ -52,7 +60,7 @@ Rendering includes stepped TSL lighting, geometry ink outlines, a WebGPU scene p
 
 Progress saves at mission transitions, camp rest, purchases, and safe intervals. Settings persist separately. Death offers checkpoint recovery. New-story replacement has a confirmation screen; ordinary continuation does not.
 
-The engine is a deliberately scoped single-player frontier foundation. Current content uses analytic ground/obstacle collision rather than rigid-body simulation, hitscan weapons rather than simulated ballistics, authored dialogue rather than generated speech, and a witnessed-disturbance/bounty loop rather than a population of police agents. See the handoff for the boundaries and the tested path for adding content.
+The engine is a single-player frontier foundation with modular campaign, progression, loot and crafting systems. Current content uses analytic ground/obstacle collision rather than rigid-body simulation, hitscan weapons rather than simulated ballistics, authored dialogue rather than generated speech, and a witnessed-disturbance/bounty loop rather than a population of police agents. See the handoff for the boundaries and the tested path for adding content.
 
 ## Source reference — separate from engine evaluation
 
@@ -66,6 +74,8 @@ The engine is a deliberately scoped single-player frontier foundation. Current c
 | Model and effort | **OpenAI, Codex, GPT-6 family**. The exact model variant and reasoning effort are not independently exposed; neither is guessed.                                                                                                                                                      |
 
 The brief required model knowledge only; no internet research was used. Package installation and publication used their respective registries and GitHub. Fifty candidate names and the actual random selection are retained in [docs/naming.json](docs/naming.json). The selected candidate was **#14, Red Sky Renegades**, followed by the randomly sampled two-character ID **VM**.
+
+Progression and loot additionally take inspiration from **Path of Exile 2** and **Diablo IV**. The content, balance, names and implementation are original.
 
 ## License
 

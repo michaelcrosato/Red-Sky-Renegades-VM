@@ -2,6 +2,7 @@ import { ADA, BOSS, BRIDGE, CRATE, POST, WAGON } from "./content";
 import { angleDelta, angleTo, distance, type Vec2 } from "../engine/math";
 import { emptyControls } from "../engine/types";
 import { Simulation } from "../engine/simulation";
+import { CampaignDemo, type DemoFrame } from "./campaign/demo";
 
 /** Retail demo: produces the same commands and dialogue responses as a player. */
 export class Director {
@@ -14,7 +15,8 @@ export class Director {
   private routeIndex = 0;
   private lastPos = { x: 0, z: 0 };
   private stuck = 0;
-  update(dt: number, sim: Simulation) {
+  private campaignDemo = new CampaignDemo();
+  update(dt: number, sim: Simulation): DemoFrame {
     const c = emptyControls(),
       s = sim.state,
       p = s.player;
@@ -45,11 +47,9 @@ export class Director {
       return { controls: c, yaw: this.yaw, restart: this.stageAge > 3 };
     if (s.stage === "complete") {
       this.completionWait += dt;
-      return {
-        controls: c,
-        yaw: this.yaw + 0.06 * dt,
-        restart: this.completionWait > 10,
-      };
+      if (this.completionWait < 5)
+        return { controls: c, yaw: this.yaw, restart: false };
+      return this.campaignDemo.update(dt, sim);
     }
     let target: Vec2 = ADA;
     if (s.stage === "meet") target = ADA;

@@ -12,7 +12,11 @@
     "check": "npm test && npm run build",
     "format": "prettier --write src tests scripts index.html vite.config.ts",
     "test:details": "node scripts/browser-details.mjs",
-    "test:territory": "node scripts/browser-territory.mjs"
+    "test:territory": "node scripts/browser-territory.mjs",
+    "test:campaign": "tsx --test tests/campaign.test.ts",
+    "test:campaign-browser": "node scripts/browser-campaign.mjs",
+    "fixtures:campaign": "tsx scripts/campaign-fixtures.ts",
+    "test:campaign-details": "node scripts/browser-campaign-details.mjs"
   },
   "dependencies": {
     "three": "0.180.0"
