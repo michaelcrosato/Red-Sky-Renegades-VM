@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <meta name="theme-color" content="#202c2d" />
+    <meta
+      name="description"
+      content="Red Sky Renegades — an original cel-shaded frontier adventure. Ride for something worth saving."
+    />
+    <meta
+      name="source-game"
+      content="Red Dead Redemption 2 for PS4, Xbox One and PC — inspiration only; original characters, world, visuals and music."
+    />
+    <meta name="initial-date" content="2026-10-16" />
+    <meta
+      name="game-engine"
+      content="Original Frontier engine, Three.js 0.180.0 (r180), WebGPU only. https://github.com/michaelcrosato/Red-Sky-Renegades-VM"
+    />
+    <meta
+      name="environment"
+      content="Codex CLI workspace; Linux Ubuntu 26.04.1 on WSL2; browser game tested with installed Playwright engines."
+    />
+    <meta
+      name="model-and-effort"
+      content="OpenAI Codex, GPT-6 family. Exact model variant and reasoning effort not independently confirmed."
+    />
+    <title>Red Sky Renegades — A Frontier Story</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <canvas
+      id="world"
+      aria-label="Red Sky Renegades 3D frontier"
+      tabindex="-1"
+    ></canvas>
+    <div id="grain" aria-hidden="true"></div>
+    <main id="ui"></main>
+    <button id="mobile-menu" aria-label="Open game menu">☰</button>
+    <noscript>This game requires JavaScript and WebGPU.</noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

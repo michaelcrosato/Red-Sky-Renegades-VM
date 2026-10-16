@@ -1,0 +1,27 @@
+{
+  "checks": [
+    "Normal Continue preserves damaged health exactly",
+    "Hostile gunfire causes death and presents checkpoint recovery",
+    "Retry restores the checkpoint with recovery health and protection",
+    "Player aim and fire hit a visible practice target",
+    "Visible player reload transfers finite reserve rounds",
+    "Corrected repeater aiming pose rendered",
+    "native-phone: live game renders without horizontal overflow",
+    "native-tablet: live game renders without horizontal overflow",
+    "native-laptop: live game renders without horizontal overflow",
+    "native-ultrawide: live game renders without horizontal overflow",
+    "Saved weather restores the rain and fog presentation",
+    "No browser errors during recovery, gunplay, weather or viewport changes"
+  ],
+  "errors": [],
+  "screenshots": [
+    "verified-death.png",
+    "verified-aim.png",
+    "native-phone.png",
+    "native-tablet.png",
+    "native-laptop.png",
+    "native-ultrawide.png",
+    "verified-rain.png"
+  ],
+  "success": true
+}
