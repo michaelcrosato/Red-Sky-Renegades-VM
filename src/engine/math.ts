@@ -1,3 +1,4 @@
+import { MAP_HALF_EXTENT, RIVER_CROSSINGS } from "../game/territory";
 export interface Vec2 {
   x: number;
   z: number;
@@ -24,16 +25,44 @@ export function terrainHeight(x: number, z: number): number {
     Math.cos(z * 0.033) * 0.55 +
     Math.sin((x + z) * 0.049) * 0.3;
   const river = Math.abs(x - riverX(z));
-  return base - (1 - clamp((river - 3.5) / 3)) * 2.2;
+  const outer = clamp((Math.max(Math.abs(x), Math.abs(z)) - 110) / 65);
+  const ridge = (cx: number, cz: number, r: number, h: number) =>
+    Math.exp(-((x - cx) ** 2 + (z - cz) ** 2) / (r * r)) * h;
+  const hills =
+    4 +
+    Math.sin(x * 0.012) * 3 +
+    Math.cos(z * 0.011) * 2 +
+    ridge(-235, -245, 95, 19) +
+    ridge(230, -210, 110, 20) +
+    ridge(-275, -40, 100, 12) +
+    ridge(260, 80, 85, 13);
+  return (
+    base -
+    (1 - clamp((river - 3.5) / 3)) * 2.2 +
+    outer * outer * (3 - 2 * outer) * hills * clamp((river - 8) / 32)
+  );
+}
+export function crossingAt(x: number, z: number) {
+  return RIVER_CROSSINGS.find(
+    (b) =>
+      Math.abs(z - b.z) < b.halfWidth &&
+      Math.abs(x - riverX(b.z)) < b.halfLength + 10,
+  );
 }
 export function groundHeight(x: number, z: number) {
-  if (Math.abs(z - 6) < 3.5 && Math.abs(x - riverX(6)) < 10) return 0.65;
+  const crossing = crossingAt(x, z);
+  if (crossing) {
+    const ramp = clamp(
+      (Math.abs(x - riverX(crossing.z)) - crossing.halfLength) / 10,
+    );
+    return lerp(crossing.height, terrainHeight(x, z), ramp);
+  }
   return terrainHeight(x, z);
 }
 export interface Obstacle extends Vec2 {
   r: number;
   height: number;
-  kind: "rock" | "building" | "crate" | "tree";
+  kind: "rock" | "building" | "crate" | "tree" | "mesa";
 }
 export function moveWithCollision(
   p: Vec2,
@@ -42,8 +71,8 @@ export function moveWithCollision(
   obstacles: Obstacle[],
   radius = 0.48,
 ): Vec2 {
-  let x = clamp(p.x + dx, -108, 108),
-    z = clamp(p.z + dz, -108, 108);
+  let x = clamp(p.x + dx, -MAP_HALF_EXTENT, MAP_HALF_EXTENT),
+    z = clamp(p.z + dz, -MAP_HALF_EXTENT, MAP_HALF_EXTENT);
   for (let iteration = 0; iteration < 2; iteration++)
     for (const o of obstacles) {
       const d = Math.hypot(x - o.x, z - o.z),
@@ -53,7 +82,10 @@ export function moveWithCollision(
         z = o.z + (d > 0.0001 ? (z - o.z) / d : 0) * min;
       }
     }
-  return { x, z };
+  return {
+    x: clamp(x, -MAP_HALF_EXTENT, MAP_HALF_EXTENT),
+    z: clamp(z, -MAP_HALF_EXTENT, MAP_HALF_EXTENT),
+  };
 }
 export function lineBlocked(
   a: Vec2,

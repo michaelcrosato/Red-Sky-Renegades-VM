@@ -11,7 +11,8 @@
     "test:browser": "node scripts/browser-check.mjs",
     "check": "npm test && npm run build",
     "format": "prettier --write src tests scripts index.html vite.config.ts",
-    "test:details": "node scripts/browser-details.mjs"
+    "test:details": "node scripts/browser-details.mjs",
+    "test:territory": "node scripts/browser-territory.mjs"
   },
   "dependencies": {
     "three": "0.180.0"

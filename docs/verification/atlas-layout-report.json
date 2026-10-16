@@ -1,0 +1,26 @@
+[
+  {
+    "name": "desktop",
+    "scrollHeight": 772,
+    "clientHeight": 772,
+    "overflowX": false
+  },
+  {
+    "name": "tablet",
+    "scrollHeight": 611,
+    "clientHeight": 611,
+    "overflowX": false
+  },
+  {
+    "name": "laptop",
+    "scrollHeight": 599,
+    "clientHeight": 599,
+    "overflowX": false
+  },
+  {
+    "name": "ultrawide",
+    "scrollHeight": 861,
+    "clientHeight": 861,
+    "overflowX": false
+  }
+]

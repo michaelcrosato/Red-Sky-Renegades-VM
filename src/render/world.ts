@@ -1,5 +1,12 @@
 import * as T from "three/webgpu";
 import {
+  addTerrain,
+  addRoadsAndBridges,
+  addVegetation,
+  addLandmarks,
+} from "./frontier";
+import { INTERIOR_MESAS, SCENERY_HALF_EXTENT } from "../game/territory";
+import {
   attribute,
   color,
   dot,
@@ -49,6 +56,10 @@ export interface World {
   deer: T.Group[];
   targets: T.Group[];
   sun: T.Mesh;
+  sky: T.Mesh;
+  vegetation: T.Group[];
+  campfires: T.Group[];
+  windmills: T.Group[];
 }
 export function makeWorld(): World {
   const group = new T.Group(),
@@ -58,35 +69,7 @@ export function makeWorld(): World {
       group.add(o);
       return o;
     };
-  const terrain = new T.PlaneGeometry(650, 650, 180, 180);
-  terrain.rotateX(-Math.PI / 2);
-  const pos = terrain.attributes.position,
-    colors: number[] = [];
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i),
-      z = pos.getZ(i);
-    pos.setY(i, terrainHeight(x, z));
-    const patch =
-      Math.sin(x * 0.11 + Math.sin(z * 0.07) * 3) * Math.cos(z * 0.08);
-    const c = new T.Color(
-      patch > 0.35 ? "#ad975f" : patch < -0.5 ? "#c49a68" : "#c8a26c",
-    );
-    colors.push(c.r, c.g, c.b);
-  }
-  terrain.setAttribute("color", new T.Float32BufferAttribute(colors, 3));
-  terrain.computeVertexNormals();
-  const tm = toon("#ffffff").clone();
-  tm.colorNode = attribute("color", "vec3").mul(
-    dot(normalWorld, vec3(-0.45, 0.82, 0.36))
-      .mul(0.5)
-      .add(0.5)
-      .mul(4)
-      .floor()
-      .div(4)
-      .mul(0.5)
-      .add(0.57),
-  );
-  group.add(new T.Mesh(terrain, tm));
+  addTerrain(group);
   // A continuous river ribbon and foam on the shallow banks.
   for (const [width, mat, y] of [
     [10, waterMaterial(), -0.9],
@@ -94,11 +77,11 @@ export function makeWorld(): World {
   ] as const) {
     const verts: number[] = [],
       ids: number[] = [];
-    for (let i = 0; i <= 180; i++) {
-      const z = -325 + (i * 650) / 180,
+    for (let i = 0; i <= 500; i++) {
+      const z = -SCENERY_HALF_EXTENT + (i * SCENERY_HALF_EXTENT * 2) / 500,
         x = riverX(z);
       verts.push(x - width / 2, y, z, x + width / 2, y, z);
-      if (i < 180) {
+      if (i < 500) {
         const n = i * 2;
         ids.push(n, n + 2, n + 1, n + 1, n + 2, n + 3);
       }
@@ -109,49 +92,7 @@ export function makeWorld(): World {
     geo.computeVertexNormals();
     group.add(new T.Mesh(geo, mat));
   }
-  // Wagon road, built from a content spline.
-  const curve = new T.CatmullRomCurve3(
-      TRAIL.map((p) => new T.Vector3(p.x, 0, p.z)),
-    ),
-    points = curve.getPoints(180),
-    rv: number[] = [],
-    ri: number[] = [];
-  points.forEach((p, i) => {
-    const d = points[Math.min(i + 1, points.length - 1)]
-      .clone()
-      .sub(points[Math.max(0, i - 1)])
-      .normalize();
-    for (const side of [-1, 1]) {
-      const x = p.x + d.z * side * 2.6,
-        z = p.z - d.x * side * 2.6;
-      rv.push(x, terrainHeight(x, z) + 0.055, z);
-    }
-    if (i < points.length - 1) {
-      let n = i * 2;
-      ri.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
-    }
-  });
-  const road = new T.BufferGeometry();
-  road.setAttribute("position", new T.Float32BufferAttribute(rv, 3));
-  road.setIndex(ri);
-  road.computeVertexNormals();
-  group.add(new T.Mesh(road, toon("#ddba7d")));
-  const bridge = new T.Group();
-  bridge.position.set(riverX(6), 0, 6);
-  group.add(bridge);
-  for (let x = -10; x < 10; x += 0.62)
-    part(
-      bridge,
-      box,
-      x % 2 ? "#93704b" : "#9f7c50",
-      [x, 0.5, 0],
-      [0.57, 0.3, 6.5],
-    );
-  for (const z of [-3.15, 3.15]) {
-    part(bridge, box, "#564c3a", [0, 1.65, z], [20, 0.14, 0.15]);
-    for (let x = -9; x <= 9; x += 3)
-      part(bridge, box, P.wood, [x, 0.8, z], [0.2, 2.5, 0.22]);
-  }
+  addRoadsAndBridges(group);
   // Layered eroded mesas; every formation is original procedural geometry.
   function mesa(x: number, z: number, r: number, h: number) {
     const g = new T.Group();
@@ -178,114 +119,17 @@ export function makeWorld(): World {
   }
   for (let i = 0; i < 32; i++) {
     const a = (i / 32) * Math.PI * 2,
-      rad = 150 + rng() * 85;
+      rad = 570 + rng() * 100;
     mesa(
       Math.sin(a) * rad,
       Math.cos(a) * rad,
-      14 + rng() * 27,
-      15 + rng() * 36,
+      23 + rng() * 32,
+      26 + rng() * 48,
     );
   }
-  mesa(91, -60, 17, 36);
-  mesa(101, -80, 12, 49);
-  mesa(-91, -62, 15, 29);
-  mesa(65, -105, 21, 27);
-  mesa(-93, 93, 22, 32);
-  // Scenic scattered rock, brush, cactus, and windswept grass.
-  const rockInst = new T.InstancedMesh(lowSphere, toon("#a68b64"), 180);
-  const matrix = new T.Matrix4(),
-    q = new T.Quaternion(),
-    scale = new T.Vector3();
-  for (let i = 0; i < 180; i++) {
-    const x = (rng() - 0.5) * 260,
-      z = (rng() - 0.5) * 260,
-      s = 0.25 + rng() * 1.4;
-    matrix.compose(
-      new T.Vector3(x, terrainHeight(x, z) + s * 0.25, z),
-      q,
-      scale.set(s, s * 0.6, s * 0.8),
-    );
-    rockInst.setMatrixAt(i, matrix);
-  }
-  group.add(rockInst);
-  const grassGeo = new T.BufferGeometry();
-  grassGeo.setAttribute(
-    "position",
-    new T.Float32BufferAttribute(
-      [
-        -0.25, 0, 0, 0.08, 0.8, 0, 0.22, 0, 0, 0, 0, -0.24, 0, 0.58, 0.08, 0, 0,
-        0.24, -0.14, 0, -0.14, 0.15, 0.62, 0.15, 0.14, 0, 0.14,
-      ],
-      3,
-    ),
-  );
-  grassGeo.computeVertexNormals();
-  const grassMat = toon("#898450", true).clone();
-  grassMat.side = T.DoubleSide;
-  const grass = new T.InstancedMesh(grassGeo, grassMat, 6500);
-  let grassIndex = 0;
-  for (let i = 0; i < 6500; i++) {
-    const x = (rng() - 0.5) * 280,
-      z = (rng() - 0.5) * 280;
-    if (Math.abs(x - riverX(z)) < 7) continue;
-    const s = 0.4 + rng() * 1.3;
-    matrix.compose(
-      new T.Vector3(x, terrainHeight(x, z), z),
-      new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), rng() * 7),
-      scale.set(s, s, s),
-    );
-    grass.setMatrixAt(grassIndex++, matrix);
-  }
-  grass.count = grassIndex;
-  group.add(grass);
-  for (let i = 0; i < 55; i++) {
-    const x = (rng() - 0.5) * 210,
-      z = (rng() - 0.5) * 210;
-    if (
-      Math.abs(x - riverX(z)) < 12 ||
-      TRAIL.some((p) => Math.hypot(p.x - x, p.z - z) < 6)
-    )
-      continue;
-    const g = new T.Group(),
-      h = 1.6 + rng() * 2.4;
-    part(g, cylinder, P.darkSage, [0, h / 2, 0], [0.2, h, 0.2]);
-    part(g, sphere, P.darkSage, [0, h, 0], [0.2, 0.23, 0.2]);
-    for (const side of [-1, 1]) {
-      const y = h * (side === 1 ? 0.6 : 0.38);
-      part(g, box, P.darkSage, [side * 0.35, y, 0], [0.65, 0.24, 0.25]);
-      part(
-        g,
-        cylinder,
-        P.darkSage,
-        [side * 0.65, y + 0.35, 0],
-        [0.14, 0.8, 0.14],
-      );
-      part(
-        g,
-        sphere,
-        P.darkSage,
-        [side * 0.65, y + 0.75, 0],
-        [0.14, 0.15, 0.14],
-      );
-    }
-    at(g, x, z);
-  }
-  for (let i = 0; i < 20; i++) {
-    const z = (rng() - 0.5) * 200,
-      x = riverX(z) + (rng() > 0.5 ? 1 : -1) * (10 + rng() * 7);
-    const g = new T.Group();
-    const trunk = part(g, cylinder, "#64543c", [0, 2.5, 0], [0.25, 5, 0.25]);
-    trunk.rotation.z = 0.1;
-    for (let j = 0; j < 5; j++)
-      part(
-        g,
-        lowSphere,
-        j % 2 ? "#78824e" : "#9b9c60",
-        [(rng() - 0.5) * 3, 4 + rng() * 1.4, (rng() - 0.5) * 3],
-        [1.5 + rng(), 0.8 + rng() * 0.6, 1.4 + rng()],
-      );
-    at(g, x, z);
-  }
+  for (const m of INTERIOR_MESAS) mesa(m.x, m.z, m.r, m.h);
+  const vegetation = addVegetation(group);
+  const expansion = addLandmarks(group);
   for (const o of OBSTACLES) {
     if (o.kind === "rock") {
       const g = new T.Group();
@@ -485,7 +329,7 @@ export function makeWorld(): World {
     birds.push(g);
   }
   const deer: T.Group[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 20; i++) {
     const g = new T.Group();
     part(g, sphere, "#a58b60", [0, 0.9, 0], [0.32, 0.42, 0.7]);
     part(g, cone, "#9b8059", [0, 1.2, 0.5], [0.23, 0.8, 0.25]);
@@ -493,7 +337,18 @@ export function makeWorld(): World {
     for (const x of [-0.2, 0.2])
       for (const z of [-0.4, 0.4])
         part(g, cylinder, "#786449", [x, 0.4, z], [0.045, 0.8, 0.045]);
-    at(g, 19 + i * 3, 31 + i * 2);
+    const homes = [
+      { x: 19, z: 31 },
+      { x: -190, z: -220 },
+      { x: -220, z: 165 },
+      { x: 185, z: 210 },
+      { x: 210, z: -160 },
+    ];
+    const home = homes[Math.floor(i / 4)],
+      x = home.x + (i % 4) * 3,
+      z = home.z + (i % 4) * 2;
+    at(g, x, z);
+    g.userData.home = { x, z };
     deer.push(g);
   }
   const targets: T.Group[] = [];
@@ -525,7 +380,7 @@ export function makeWorld(): World {
   );
   at(rangeSign, 84, 49, 2.5);
   const sky = new T.Mesh(
-    new T.SphereGeometry(480, 32, 16),
+    new T.SphereGeometry(1200, 32, 16),
     new T.MeshBasicNodeMaterial({ side: T.BackSide, depthWrite: false }),
   );
   const skyMat = sky.material as T.MeshBasicNodeMaterial;
@@ -537,12 +392,12 @@ export function makeWorld(): World {
   sky.renderOrder = -10;
   group.add(sky);
   const sun = new T.Mesh(
-    new T.SphereGeometry(15, 32, 24),
+    new T.SphereGeometry(60, 32, 24),
     new T.MeshBasicNodeMaterial({ color: "#ffe5ab", fog: false }),
   );
-  sun.position.set(-105, 62, -180);
+  sun.position.set(-420, 248, -720);
   group.add(sun);
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 48; i++) {
     const cloud = new T.Group();
     for (let j = 0; j < 5; j++)
       part(
@@ -553,9 +408,9 @@ export function makeWorld(): World {
         [13, 2.2, 5],
       );
     cloud.position.set(
-      (rng() - 0.5) * 380,
-      45 + rng() * 35,
-      -100 - rng() * 160,
+      (rng() - 0.5) * 1100,
+      65 + rng() * 45,
+      (rng() - 0.5) * 1100,
     );
     group.add(cloud);
   }
@@ -571,5 +426,9 @@ export function makeWorld(): World {
     deer,
     targets,
     sun,
+    sky,
+    vegetation,
+    campfires: expansion.campfires,
+    windmills: expansion.windmills,
   };
 }

@@ -100,6 +100,8 @@ export interface GameState {
   mode: "story" | "range";
   targets: { x: number; z: number; health: number }[];
   completedAt: number | null;
+  discovered: string[];
+  explorationTarget: string | null;
 }
 export type GameEvent =
   | { type: "toast"; title: string; text?: string }

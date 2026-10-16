@@ -20,6 +20,7 @@ import {
   clamp,
   distance,
   groundHeight,
+  crossingAt,
   lineBlocked,
   moveWithCollision,
   riverX,
@@ -28,6 +29,7 @@ import {
 import { type Controls, type GameEvent, type GameState } from "./types";
 import { lastGoodDeed } from "../game/mission";
 import type { MissionGraph } from "./mission";
+import { LANDMARKS, landmarkById } from "../game/territory";
 
 export function newGame(mode: "story" | "range" = "story"): GameState {
   return {
@@ -103,6 +105,8 @@ export function newGame(mode: "story" | "range" = "story"): GameState {
     kills: 0,
     deaths: 0,
     completedAt: null,
+    discovered: [],
+    explorationTarget: null,
     targets: Array.from({ length: 5 }, (_, i) => ({
       x: 70 + i * 5,
       z: 30 - (i % 2) * 5,
@@ -259,6 +263,15 @@ export class Simulation {
           kind: `herb-${i}`,
           position: WILD_HERB[i],
         };
+    for (const place of LANDMARKS)
+      if (nearby(place, 4))
+        return {
+          label:
+            place.kind === "camp" ? "Rest at camp" : "Read the trail marker",
+          hint: place.name,
+          kind: `landmark:${place.id}`,
+          position: place,
+        };
     for (const e of s.enemies)
       if (e.health <= 0 && !e.loot && nearby(e, 2.5))
         return {
@@ -391,6 +404,19 @@ export class Simulation {
         text: "+$5 · +6 revolver rounds · +4 repeater rounds",
       });
       this.checkpoint();
+    } else if (t.kind.startsWith("landmark:")) {
+      const place = landmarkById(t.kind.slice(9));
+      if (!place) return;
+      if (place.kind === "camp") {
+        p.health = p.stamina = p.focus = s.horse.stamina = 100;
+        this.emit({
+          type: "toast",
+          title: "A place to rest",
+          text: "Cores restored · Juniper watered · Progress saved",
+        });
+      }
+      this.say(place.name.toUpperCase(), place.story);
+      this.checkpoint();
     } else if (t.kind === "range") {
       p.health = p.focus = p.stamina = 100;
       p.reserve = { revolver: 90, rifle: 90 };
@@ -402,6 +428,12 @@ export class Simulation {
         text: "Five targets · Full supplies",
       });
     }
+  }
+  navigateTo(id: string | null) {
+    if (id !== null && !landmarkById(id)) return false;
+    this.state.explorationTarget = id;
+    this.checkpoint();
+    return true;
   }
   buy(item: "tonic" | "ammo") {
     const s = this.state,
@@ -554,6 +586,17 @@ export class Simulation {
     if (c.focus && p.focus > 5) p.focusing = !p.focusing;
     const worldDt = dt * (p.focusing ? 0.32 : 1);
     s.elapsed += dt;
+    for (const place of LANDMARKS)
+      if (distance(p, place) < 18 && !s.discovered.includes(place.id)) {
+        s.discovered.push(place.id);
+        this.emit({
+          type: "toast",
+          title: place.name,
+          text: `New landmark · ${s.discovered.length} of ${LANDMARKS.length} discovered`,
+        });
+        this.emit({ type: "sound", name: "pickup" });
+        this.checkpoint();
+      }
     s.time = (s.time + worldDt * 0.003) % 24;
     s.weatherTime += worldDt;
     if (s.weatherTime > 190) {
@@ -598,8 +641,7 @@ export class Simulation {
         : boost
           ? 7.1
           : 4.2;
-    const inWater =
-      Math.abs(p.x - riverX(p.z)) < 5.3 && !(Math.abs(p.z - 6) < 3.5);
+    const inWater = Math.abs(p.x - riverX(p.z)) < 5.3 && !crossingAt(p.x, p.z);
     if (inWater) speed *= 0.48;
     const mx = Math.sin(yaw) * c.moveZ - Math.cos(yaw) * c.moveX,
       mz = Math.cos(yaw) * c.moveZ + Math.sin(yaw) * c.moveX;

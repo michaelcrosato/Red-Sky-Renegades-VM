@@ -23,6 +23,10 @@ The title screen becomes an autonomous store demo after **10 seconds without inp
 
 ## Play locally
 
+The territory now has **10× its original playable area**: **216 × 216 m → approximately 683.05 × 683.05 m** (466,560 m²). Explore eight new landmarks across pine highlands, Redwash Canyon, Sunscar Highlands, Saltwind Flats and Cottonwood Lowlands. Ten new connecting trails and three river bridges link the territory. Open the journal, cycle destinations with Left/Right, and select **Track this destination** to guide your ride. Discoveries and tracked destinations persist alongside your existing story save.
+
+[Expansion details and evidence](docs/MAP-EXPANSION.md)
+
 ```sh
 npm ci
 npm run dev

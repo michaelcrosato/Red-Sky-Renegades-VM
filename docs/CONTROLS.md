@@ -33,3 +33,9 @@ Aim assistance only acquires living targets inside a narrow forward cone, in wea
 The nearest eligible interaction appears in the lower center of the screen. Story interactions take priority over mounting to make delivery and investigation possible from horseback. If you leave Juniper behind, whistle to call her.
 
 There are no mobile movement pads or touch combat buttons. The small menu button opens normal menus. A controller is the intended input on every supported device.
+
+## Explore the expanded territory
+
+Open the journal with Create/View or Tab. D-pad Left/Right or the arrow keys cycle the story objective and eight frontier destinations. Cross or Enter tracks the selected destination on the compass and minimap. Circle or Escape closes the atlas. Selecting the story objective returns navigation to the medicine mission.
+
+Landmarks are discovered on approach and recorded in your save. Triangle/E reads a trail marker; at Pinewatch Camp and Settlers’ Rest it also restores rider and horse cores.

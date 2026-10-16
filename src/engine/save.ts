@@ -1,6 +1,7 @@
 import { newGame } from "./simulation";
 import type { GameState } from "./types";
 import { STAGES } from "../game/content";
+import { SAVE_POSITION_LIMIT, landmarkById } from "../game/territory";
 export interface StorageLike {
   getItem(k: string): string | null;
   setItem(k: string, v: string): void;
@@ -35,8 +36,8 @@ export function validSave(value: unknown): value is GameState {
   const position = (p: unknown) =>
     !!p &&
     typeof p === "object" &&
-    finite((p as { x: number }).x, -110, 110) &&
-    finite((p as { z: number }).z, -110, 110);
+    finite((p as { x: number }).x, -SAVE_POSITION_LIMIT, SAVE_POSITION_LIMIT) &&
+    finite((p as { z: number }).z, -SAVE_POSITION_LIMIT, SAVE_POSITION_LIMIT);
   const actor = (a: unknown) =>
     position(a) &&
     typeof (a as { id: unknown }).id === "string" &&
@@ -97,7 +98,13 @@ export function validSave(value: unknown): value is GameState {
     (s.completedAt === null || finite(s.completedAt, 0)) &&
     Array.isArray(s.targets) &&
     s.targets.length === 5 &&
-    s.targets.every((t) => position(t) && finite(t.health))
+    s.targets.every((t) => position(t) && finite(t.health)) &&
+    Array.isArray(s.discovered) &&
+    s.discovered.every((id) => typeof id === "string" && !!landmarkById(id)) &&
+    new Set(s.discovered).size === s.discovered.length &&
+    (s.explorationTarget === null ||
+      (typeof s.explorationTarget === "string" &&
+        !!landmarkById(s.explorationTarget)))
   );
 }
 export class SaveStore {
@@ -108,6 +115,11 @@ export class SaveStore {
       const raw = this.storage.getItem(SAVE_KEY);
       if (!raw) return null;
       const data = JSON.parse(raw);
+      // Additive migration: existing version-1 stories keep their exact progress.
+      if (data?.version === 1) {
+        if (data.discovered === undefined) data.discovered = [];
+        if (data.explorationTarget === undefined) data.explorationTarget = null;
+      }
       return validSave(data) ? data : null;
     } catch {
       this.error = "Saved progress could not be read.";

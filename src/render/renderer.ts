@@ -18,6 +18,7 @@ import {
   distance,
 } from "../engine/math";
 import { OBSTACLES } from "../game/content";
+import { MAP_HALF_EXTENT } from "../game/territory";
 import type { GameEvent, GameState } from "../engine/types";
 import type { Settings } from "../engine/save";
 import {
@@ -39,7 +40,7 @@ interface Particle {
 export class FrontierRenderer {
   renderer: T.WebGPURenderer;
   scene = new T.Scene();
-  camera = new T.PerspectiveCamera(55, 1, 0.15, 650);
+  camera = new T.PerspectiveCamera(55, 1, 0.15, 1500);
   post!: T.PostProcessing;
   world!: World;
   player = human();
@@ -359,6 +360,24 @@ export class FrontierRenderer {
     });
     this.world.group.getObjectByName("windmill")!.rotation.z =
       this.elapsed * 0.4;
+    this.world.sky.position.copy(this.camera.position);
+    this.world.sun.position
+      .copy(this.camera.position)
+      .add(new T.Vector3(-420, 248, -720));
+    const vegetationRange = this.settings.quality === "high" ? 300 : 210;
+    for (const cell of this.world.vegetation)
+      cell.visible =
+        Math.hypot(
+          cell.position.x - this.camera.position.x,
+          cell.position.z - this.camera.position.z,
+        ) <
+        vegetationRange + cell.userData.radius;
+    for (const rotor of this.world.windmills)
+      rotor.rotation.z = this.elapsed * 0.4;
+    for (const fire of this.world.campfires)
+      for (const flame of fire.children)
+        if (flame.userData.flame)
+          flame.scale.y = 0.7 + Math.sin(this.elapsed * 7 + flame.id) * 0.15;
     this.world.birds.forEach((b, i) => {
       b.position.set(
         Math.sin(this.elapsed * 0.07 + i) * 43,
@@ -382,12 +401,12 @@ export class FrontierRenderer {
           groundHeight(d.position.x, d.position.z) +
           Math.abs(Math.sin(this.elapsed * 8)) * 0.15;
       } else d.rotation.y = 1 + Math.sin(this.elapsed * 0.2 + i) * 0.1;
-      if (d.position.x > 100) {
-        d.position.set(
-          19 + i * 3,
-          groundHeight(19 + i * 3, 31 + i * 2),
-          31 + i * 2,
-        );
+      if (
+        Math.abs(d.position.x) > MAP_HALF_EXTENT - 5 ||
+        Math.abs(d.position.z) > MAP_HALF_EXTENT - 5
+      ) {
+        const home = d.userData.home;
+        d.position.set(home.x, groundHeight(home.x, home.z), home.z);
       }
     });
     this.lastDust += dt;

@@ -8,8 +8,16 @@ import {
   MERCHANT,
   STAGES,
   WEAPONS,
+  TRAIL,
 } from "../game/content";
-import { angleTo, distance } from "../engine/math";
+import { angleTo, distance, riverX } from "../engine/math";
+import {
+  LANDMARKS,
+  FRONTIER_ROADS,
+  landmarkById,
+  regionAt,
+} from "../game/territory";
+import { territoryMap } from "./territory-map";
 import type { Controls, GameState } from "../engine/types";
 import type { Settings } from "../engine/save";
 import type { Simulation } from "../engine/simulation";
@@ -45,6 +53,9 @@ export type UIAction =
   | "retry"
   | "replay"
   | "journal"
+  | "mark-location"
+  | "map-next"
+  | "map-prev"
   | "confirm-new"
   | "cancel-new";
 const star = '<span class="star">✦</span>';
@@ -67,6 +78,12 @@ export class UI {
   private chapterTime = 0;
   private hitTime = 0;
   private lastStage = "";
+  private lastRegion = "";
+  private journalIndex = 0;
+  private journalState?: GameState;
+  get selectedWaypoint() {
+    return LANDMARKS[this.journalIndex - 1]?.id ?? null;
+  }
   private map: CanvasRenderingContext2D;
   onAction: (action: UIAction) => void = () => {};
   onSetting: (s: Settings) => void = () => {};
@@ -137,7 +154,9 @@ export class UI {
   }
   private collect(parent: HTMLElement) {
     this.focusItems = Array.from(
-      parent.querySelectorAll<HTMLElement>("button:not(:disabled),input"),
+      parent.querySelectorAll<HTMLElement>(
+        "button:not(:disabled):not([data-map-cycle]),input",
+      ),
     );
     this.selected = 0;
     this.paintFocus();
@@ -209,8 +228,14 @@ export class UI {
         heading =
           s?.mode === "range" ? "The proving ground" : "The last good deed";
         kicker = "YOUR JOURNAL";
+        this.journalState = s!;
+        this.journalIndex = s!.explorationTarget
+          ? LANDMARKS.findIndex((l) => l.id === s!.explorationTarget) + 1
+          : 0;
         body = this.journalBody(s!);
-        buttons = this.button("Back to the trail", "back");
+        buttons =
+          this.button("Track this destination", "mark-location") +
+          this.button("Back to the trail", "back");
         break;
       case "dialogue":
         heading = detail?.speaker ?? "";
@@ -311,15 +336,19 @@ export class UI {
   }
   private journalBody(s: GameState) {
     const stage = STAGES.find((t) => t.id === s.stage)!;
-    const step = STAGES.indexOf(stage);
-    return `<div class="journal-layout"><div class="journal-map"><svg viewBox="0 0 400 300" role="img" aria-label="Territory map: Cinder Creek to Mercy Station"><path class="map-river" d="M170 -20 Q230 65 180 140 T180 330"/><path class="map-trail" d="M75 236 Q110 145 173 140 T302 72"/><path class="map-mesa" d="m280 160 30-45 28 45zm-245-90 32-40 30 40z"/><circle cx="75" cy="236" r="7"/><circle cx="302" cy="72" r="7"/><text x="22" y="266">CINDER CREEK</text><text x="230" y="52">MERCY STATION</text><text x="174" y="127">BRIDGE</text><text x="130" y="185">WAGON</text><text x="365" y="30">N ↑</text><circle class="map-player" cx="${(s.player.x + 85) * 2}" cy="${(s.player.z + 65) * 2}" r="5"/></svg></div><div><h3>${stage.title}</h3><p>${stage.text}</p><div class="journal-progress">${STAGES.slice(
-      0,
-      8,
-    )
-      .map((t, i) => `<i class="${i <= step ? "done" : ""}"></i>`)
-      .join(
-        "",
-      )}</div><div class="inventory-line"><span>$${s.inventory.dollars.toFixed(2)}</span><span>${s.inventory.tonics} tonics</span><span>${s.inventory.herbs} sage</span></div><p class="muted">Honor ${s.honor >= 0 ? "+" : ""}${s.honor} · Bounty $${s.bounty}<br>Juniper’s bond ${Math.floor(s.horse.bond)}%${s.inventory.relic ? "<br>✓ Forgotten memorial discovered" : ""}</p></div></div>`;
+    const place = LANDMARKS[this.journalIndex - 1],
+      target = place ?? stage.target;
+    return `<div class="journal-layout"><div class="journal-map">${territoryMap(s, this.journalIndex)}</div><div class="destination"><div class="destination-cycle"><button data-map-cycle tabindex="-1" data-action="map-prev" aria-label="Previous destination">‹</button><span>${place ? `TRAIL MARKER ${this.journalIndex} / ${LANDMARKS.length}` : "STORY OBJECTIVE"}</span><button data-map-cycle tabindex="-1" data-action="map-next" aria-label="Next destination">›</button></div><h3>${place?.name ?? stage.title}</h3><p>${place?.description ?? stage.text}</p><p class="destination-distance">${Math.round(distance(s.player, target))} m away${place ? ` · ${s.discovered.includes(place.id) ? "Discovered" : "Unexplored"}` : ""}</p><p class="map-instructions">← → Choose a destination<br>× Track it on your compass</p><div class="journal-progress">${LANDMARKS.map((l) => `<i class="${s.discovered.includes(l.id) ? "done" : ""}"></i>`).join("")}</div><p class="discovery-count">${s.discovered.length} of ${LANDMARKS.length} frontier landmarks discovered</p><div class="inventory-line"><span>$${s.inventory.dollars.toFixed(2)}</span><span>${s.inventory.tonics} tonics</span><span>${s.inventory.herbs} sage</span></div></div></div>`;
+  }
+  cycleDestination(direction: number) {
+    if (!this.journalState) return;
+    this.journalIndex =
+      (this.journalIndex + direction + LANDMARKS.length + 1) %
+      (LANDMARKS.length + 1);
+    this.overlay.querySelector(".journal-layout")!.outerHTML = this.journalBody(
+      this.journalState,
+    );
+    this.collect(this.overlay);
   }
   navigate(c: Controls) {
     if (this.screen === "playing") return;
@@ -346,6 +375,7 @@ export class UI {
         (this.guidePage + c.navX + FIELD_GUIDE.length) % FIELD_GUIDE.length;
       this.show("guide");
     }
+    if (c.navX && this.screen === "journal") this.cycleDestination(c.navX);
     if (c.confirm) focused?.click();
     else if (c.back && this.screen !== "title") this.onAction("back");
   }
@@ -402,24 +432,40 @@ export class UI {
     const s = sim.state,
       p = s.player,
       stage = STAGES.find((t) => t.id === s.stage)!,
-      way = stage.target;
+      exploration = landmarkById(s.explorationTarget),
+      way = exploration ?? stage.target,
+      region = regionAt(p.x, p.z);
     if (`${s.mode}:${s.stage}` !== this.lastStage) {
       this.lastStage = `${s.mode}:${s.stage}`;
       this.chapter(s.mode === "range" ? "THE PROVING GROUND" : stage.location);
     }
+    if (
+      region !== this.lastRegion &&
+      Math.max(Math.abs(p.x), Math.abs(p.z)) > 110
+    )
+      this.chapter(region);
+    this.lastRegion = region;
+    this.setText(".region-label", region);
     this.setText(
       "#mission-kicker",
-      s.mode === "range" ? "THE PROVING GROUND" : "THE LAST GOOD DEED",
+      exploration
+        ? "EXPLORING THE FRONTIER"
+        : s.mode === "range"
+          ? "THE PROVING GROUND"
+          : "THE LAST GOOD DEED",
     );
     this.setText(
       "#objective-title",
-      s.mode === "range" ? "Make every shot count" : stage.title,
+      exploration?.name ??
+        (s.mode === "range" ? "Make every shot count" : stage.title),
     );
     this.setText(
       "#objective-text",
-      s.mode === "range"
-        ? "Aim at five targets. Use the range sign to reset."
-        : stage.text,
+      exploration
+        ? exploration.description
+        : s.mode === "range"
+          ? "Aim at five targets. Use the range sign to reset."
+          : stage.text,
     );
     const degrees =
       (((Math.PI - (view?.yaw ?? 0)) * 180) / Math.PI + 360) % 360;
@@ -466,7 +512,7 @@ export class UI {
         : "RMB  AIM / LOOK     LMB  FIRE     Q  EQUIPMENT     TAB  JOURNAL",
     );
     const marker = this.root.querySelector<HTMLElement>("#waypoint")!;
-    if (view && s.stage !== "complete") {
+    if (view && (exploration || s.stage !== "complete")) {
       const projected = view.project(way.x, way.z, 3.4);
       marker.style.left = projected.x + "px";
       marker.style.top = projected.y + "px";
@@ -503,30 +549,24 @@ export class UI {
     c.strokeStyle = "#8e9b8a";
     c.lineWidth = 12;
     c.beginPath();
-    for (let z = -160; z <= 160; z += 2) {
-      const x = -8 + Math.sin(z * 0.028) * 8;
+    for (let z = p.z - 100; z <= p.z + 100; z += 2) {
+      const x = riverX(z);
       const px = (x - p.x) * scale,
         pz = (z - p.z) * scale;
-      z === -160 ? c.moveTo(px, pz) : c.lineTo(px, pz);
+      z === p.z - 100 ? c.moveTo(px, pz) : c.lineTo(px, pz);
     }
     c.stroke();
-    const points = [
-      CAMP,
-      { x: -28, z: 18 },
-      { x: -21, z: 6 },
-      { x: 7, z: 6 },
-      { x: 27, z: -14 },
-      { x: 39, z: -29 },
-    ];
     c.strokeStyle = "#d7c59c";
     c.lineWidth = 4;
-    c.beginPath();
-    points.forEach((v, i) =>
-      i
-        ? c.lineTo((v.x - p.x) * scale, (v.z - p.z) * scale)
-        : c.moveTo((v.x - p.x) * scale, (v.z - p.z) * scale),
-    );
-    c.stroke();
+    for (const points of [TRAIL, ...FRONTIER_ROADS]) {
+      c.beginPath();
+      points.forEach((v, i) =>
+        i
+          ? c.lineTo((v.x - p.x) * scale, (v.z - p.z) * scale)
+          : c.moveTo((v.x - p.x) * scale, (v.z - p.z) * scale),
+      );
+      c.stroke();
+    }
     for (const e of s.enemies)
       if (e.health > 0 && distance(p, e) < 55) {
         c.fillStyle = "#a24d3b";
@@ -538,6 +578,20 @@ export class UI {
     for (const v of [CAMP, MERCHANT, GRAVE]) {
       c.fillRect((v.x - p.x) * scale - 3, (v.z - p.z) * scale - 3, 6, 6);
     }
+    LANDMARKS.forEach((l, i) => {
+      if (distance(p, l) < 90) {
+        const x = (l.x - p.x) * scale,
+          z = (l.z - p.z) * scale;
+        c.fillStyle = s.discovered.includes(l.id) ? "#526446" : "#d7be86";
+        c.beginPath();
+        c.arc(x, z, 5, 0, 7);
+        c.fill();
+        c.fillStyle = "#283c30";
+        c.font = "bold 8px Arial";
+        c.textAlign = "center";
+        c.fillText(String(i + 1), x, z + 3);
+      }
+    });
     if (!p.mounted) {
       c.fillStyle = "#65482b";
       c.beginPath();
@@ -545,9 +599,10 @@ export class UI {
       c.fill();
     }
     const target =
-      s.mode === "range"
+      landmarkById(s.explorationTarget) ??
+      (s.mode === "range"
         ? { x: 84, z: 49 }
-        : STAGES.find((t) => t.id === s.stage)!.target;
+        : STAGES.find((t) => t.id === s.stage)!.target);
     let tx = (target.x - p.x) * scale,
       tz = (target.z - p.z) * scale;
     const d = Math.hypot(tx, tz);

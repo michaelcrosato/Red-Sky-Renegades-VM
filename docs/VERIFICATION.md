@@ -4,7 +4,7 @@ Date: **2026-10-16**. This record distinguishes actual gameplay rendering from c
 
 ## Automated engine checks
 
-`npm run check` runs **15 passing tests**, strict TypeScript compilation, and the production Vite build. The suite covers:
+`npm run check` runs **22 passing tests**, strict TypeScript compilation, and the production Vite build. The original 15 tests cover the systems below; seven expansion tests additionally verify exact area, trail traversal/connectivity, all crossings, expanded saves, discoveries and atlas coordinates. See [the expansion record](MAP-EXPANSION.md) for the new browser evidence.
 
 - Complete story progression through all nine mission states, five defeated outlaws, the mercy choice, supply delivery, rewards and the ending.
 - Three fresh autonomous cycles using ordinary gameplay commands.

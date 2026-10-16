@@ -1,4 +1,5 @@
 import type { Obstacle, Vec2 } from "../engine/math";
+import { FRONTIER_OBSTACLES } from "./territory";
 export const CAMP = { x: -57, z: 46 };
 export const ADA = { x: -58, z: 42 };
 export const MERCHANT = { x: -67, z: 41 };
@@ -111,6 +112,7 @@ export const ENEMY_SPAWNS = [
   { x: 59, z: -44 },
 ];
 export const OBSTACLES: Obstacle[] = [
+  ...FRONTIER_OBSTACLES,
   { x: 39, z: -44, r: 4.2, height: 5, kind: "building" },
   { x: 61, z: -27, r: 3.5, height: 5, kind: "building" },
   { x: 24, z: -23, r: 2.1, height: 1.9, kind: "rock" },
@@ -139,6 +141,11 @@ export const TRAIL: Vec2[] = [
   POST,
 ];
 export const FIELD_GUIDE = [
+  {
+    title: "Beyond Cinder Creek",
+    copy: "Eight frontier landmarks wait beyond camp. Open the journal and use D-pad Left or Right to choose a destination. Cross tracks it on your compass. Camps restore your cores; trail markers tell the territory’s stories.",
+    keys: "Tab · Left / Right arrows · Enter to track",
+  },
   {
     title: "Ride the frontier",
     copy: "Left stick moves. Right stick looks. Hold Cross to sprint or gallop. Triangle mounts Juniper; hold D-pad Up to call her. She follows the road best at a steady pace.",

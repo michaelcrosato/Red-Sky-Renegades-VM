@@ -7,6 +7,17 @@
 - `npm run test:browser` exercises a real WebGPU renderer and the title → game → save → continue → attract → ending → next loop → interrupt path.
 - Browser artifacts go to `/tmp/red-sky-qa` by default. Set `QA_OUTPUT` on other machines.
 - The public main branch is `michaelcrosato/Red-Sky-Renegades-VM`.
+- `npm run test:territory` verifies the expanded map in a hardware WebGPU browser, including a real ride outside the old boundary, discovery, save migration and all eight destinations.
+
+## Territory expansion
+
+The playable half extent is `108 * sqrt(10)` metres, giving exactly ten times the original 216 × 216 m area. `src/game/territory.ts` owns the bounds, scenery extent, eight landmarks, ten new routes, three crossing definitions, region names and additional collision data. Movement, terrain, camera, saves, atlas and scenery consume those definitions.
+
+`src/render/frontier.ts` builds terrain tiles, the full trail network, bridges, landmark models and vegetation. The terrain extends beyond the movement boundary for a complete horizon. Vegetation uses 64 spatial groups with instanced geometry; high/balanced quality selects a 300/210 m visibility radius plus each group's size. Keep actor and prop dimensions in metres when changing territory size.
+
+`src/ui/territory-map.ts` projects world coordinates into the full atlas. The journal cycles one destination at a time and forwards the chosen ID to `Simulation.navigateTo`. Discovery is recorded once per landmark. Camps restore rider/horse cores and trail markers use the existing dialogue system.
+
+Existing version-1 saves migrate additively: missing `discovered` and `explorationTarget` fields default to `[]` and `null`. Original coordinates and mission progress stay intact. New save validation accepts all positions inside the enlarged world, with the same two-metre serialization tolerance used by the original map. Future landmark IDs should remain stable.
 
 ## Boundaries
 
@@ -42,7 +53,7 @@ The game uses a bounded frame delta to prevent a background-tab return from adva
 3. Reuse the scene factories for the new settlement, camps, mounts, targets and enemies. Add authored composition to `world.ts`, or extract a second scene-builder function with the same `World` contract. Terrain and obstacle helpers are shared by camera, actors and combat, so changing them keeps all three aligned.
 4. Add objective IDs/text and any new signal emissions required by genuinely new mechanics. Existing travel, investigate, combat, decision and delivery beats need content and graph changes rather than a replacement game loop.
 5. Author a corresponding `Director` route for retail demonstration. A demo must never teleport the player, directly deplete enemy health, skip reward logic, or write a story save.
-6. Extend the save schema version if serialized state changes. Include a migration or reject unsupported versions safely.
+6. Extend the save schema version for breaking serialized-state changes. Additive optional fields can use a validated migration with defaults, as the territory expansion does.
 7. Add one end-to-end simulation journey for the story, then inspect its real renderer and controller path.
 
 ### Actors, weapons and interactions

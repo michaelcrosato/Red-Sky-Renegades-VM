@@ -8,6 +8,13 @@ import { Director } from "./game/director";
 import { FrontierRenderer } from "./render/renderer";
 import { UI, type UIAction, type Screen } from "./ui/ui";
 import identity from "./game/identity.json";
+import {
+  MAP_AREA,
+  MAP_HALF_EXTENT,
+  MAP_AREA_MULTIPLIER,
+  LANDMARKS,
+  FRONTIER_ROADS,
+} from "./game/territory";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#world")!;
 const storage = new SaveStore({
@@ -148,6 +155,16 @@ function action(a: UIAction) {
       break;
     case "journal":
       ui.show("journal", sim.state);
+      break;
+    case "mark-location":
+      sim.navigateTo(ui.selectedWaypoint);
+      ui.show("playing");
+      break;
+    case "map-next":
+      ui.cycleDestination(1);
+      break;
+    case "map-prev":
+      ui.cycleDestination(-1);
       break;
     case "back":
       goBack();
@@ -408,6 +425,20 @@ Object.defineProperty(window, "__frontier", {
     get snapshot() {
       return {
         identity,
+        territory: {
+          halfExtent: MAP_HALF_EXTENT,
+          area: MAP_AREA,
+          areaMultiplier: MAP_AREA_MULTIPLIER,
+          landmarks: LANDMARKS.map(({ id, name, x, z }) => ({
+            id,
+            name,
+            x,
+            z,
+          })),
+          roads: FRONTIER_ROADS.map((road) =>
+            road.map((point) => ({ ...point })),
+          ),
+        },
         ready,
         screen: ui.screen,
         demo,
